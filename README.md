@@ -12,8 +12,11 @@ a separate **Cloud Run** service. Anything that can't run for free on Cloudflare
 Run repo (`securepdf-run`, reusing `@securepdf/core`). See
 [`docs/CLOUD_RUN_BOUNDARY.md`](docs/CLOUD_RUN_BOUNDARY.md).
 
-> Status: **Milestone 0 — project scaffold.** Feature logic is not implemented
-> yet; packages export typed stubs. See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+> Status: **Deployable MVP (M1–M4 done).** The schema + PDF organize engine, the
+> in-browser GUI, the local CLI, and the light Worker + Cloud Run proxy are
+> implemented, tested (53 unit tests), and verified end-to-end in a browser.
+> Cloud Run (`securepdf-run`) and exotic image codecs are the remaining tracks.
+> See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 ## Why one engine
 
@@ -52,6 +55,32 @@ pnpm check            # lint + typecheck + test + build
 | `pnpm test` | Vitest |
 | `pnpm build` | Build the web SPA into `apps/web/dist` |
 | `pnpm deploy` | Build, then `wrangler deploy` |
+
+## Use the CLI
+
+```bash
+pnpm -C apps/cli build                       # bundle to apps/cli/dist/cli.js
+node apps/cli/dist/cli.js capabilities --json
+node apps/cli/dist/cli.js merge a.pdf b.pdf -o out.pdf
+node apps/cli/dist/cli.js convert image.png --to pdf -o image.pdf
+node apps/cli/dist/cli.js organize --input a=a.pdf --plan plan.json -o out.pdf
+```
+
+## Deploy (Cloudflare, free tier)
+
+```bash
+pnpm build                                   # → apps/web/dist
+wrangler deploy --dry-run                    # validate bundle + assets (no account)
+wrangler deploy                              # needs `wrangler login`
+```
+
+To enable heavy operations later, set the Cloud Run backend (heavy endpoints
+return `503 BACKEND_NOT_CONFIGURED` until then):
+
+```bash
+wrangler secret put CLOUD_RUN_URL            # base URL of the securepdf-run service
+wrangler secret put CLOUD_RUN_TOKEN          # optional bearer token (keeps it private)
+```
 
 ## Documentation
 

@@ -270,6 +270,10 @@ PDFs; JPG portrait/landscape; transparent PNG; multipage TIFF and HEIC when adde
 
 ## 11. Milestones (this repo)
 
+> Progress (2026-06): **M0–M4 done** — scaffold, core engine, browser GUI, CLI,
+> and the light Worker + proxy are implemented, tested (53 unit tests), and
+> verified (browser E2E + `wrangler deploy --dry-run`). M5–M7 remain.
+
 ### Milestone 0 — Project Setup ✅ (scaffold built & verified)
 pnpm workspace, TS strict, ESLint/Prettier, Vitest/Playwright, Workers Static
 Assets build, CI, fixtures, package skeletons.
