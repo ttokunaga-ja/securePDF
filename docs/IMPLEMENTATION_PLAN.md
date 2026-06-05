@@ -1,518 +1,316 @@
-# securePDF Implementation Plan
+# securePDF Implementation Plan (v3)
+
+> **v3 — two-tier split.** securePDF runs **entirely on the Cloudflare free
+> tier**: static SPA delivery, in-browser PDF processing, and a *light* Worker
+> that **proxies** heavy operations to a separate **Cloud Run** service. Anything
+> that can't run for free on Cloudflare (large PDFs, Office→PDF, native
+> qpdf/Ghostscript/LibreOffice/ImageMagick) lives in the Cloud Run repo
+> (`securepdf-run`, not in this repo), which **reuses `@securepdf/core`**. The
+> boundary is pinned in [`CLOUD_RUN_BOUNDARY.md`](./CLOUD_RUN_BOUNDARY.md);
+> decisions in [`DECISIONS.md`](./DECISIONS.md); the v2→v3 rationale and the
+> original audit in [`PLAN_AUDIT.md`](./PLAN_AUDIT.md).
 
 ## 1. Product Direction
 
-securePDF is a PDF organization and To PDF conversion tool that runs as a
-Cloudflare Pages project. The project should expose the same PDF capability
-through three entry points:
+securePDF is a PDF organization and "To PDF" conversion tool. The same capability
+is exposed through three entry points — **browser GUI**, **CLI**, **HTTP API** —
+all driven by one **versioned operation schema** and one **runtime-neutral core**.
 
-- Browser GUI for human users.
-- CLI for local automation and AI agents.
-- OpenAPI-compatible HTTP API hosted by Cloudflare Pages Functions.
+It deploys as a single **Cloudflare Worker with Static Assets**, and it is
+designed so that **everything in this repo fits the Cloudflare free tier**:
 
-The core design principle is to avoid separate implementations for GUI, CLI,
-and API. All entry points should generate or consume the same versioned
-operation schema and call the same core engine where the runtime allows it.
+- **Browser (default, free, private):** does the actual PDF work on-device. No
+  upload, no isolate memory ceiling, no per-request CPU cap.
+- **Light Worker (free):** serves the SPA and the OpenAPI spec, answers
+  `capabilities` and `validate-plan`, and **proxies** heavy operations to Cloud
+  Run. It never parses PDFs itself.
+- **Cloud Run (separate repo):** the heavy server-side API for CLI/agents and for
+  what the browser can't do — large PDFs, Office→PDF, native compress/repair. It
+  reuses `@securepdf/core` plus native tools.
 
-The project does not require Cloud Run, a VPS, Lambda, or a separate backend.
-Dynamic API behavior is expected to run inside Cloudflare Pages Functions.
+This keeps the "one engine, three entry points" principle (the engine now also
+runs on Cloud Run) while drawing a hard line: **no heavy compute on Cloudflare.**
 
 ## 2. Approved Initial Scope
 
 ### 2.1 PDF Organization
 
-The first functional scope is PDF page organization:
-
-- Merge PDFs.
-- Split PDF by page range.
-- Extract selected pages.
-- Delete selected pages.
-- Rotate selected pages.
-- Reorder pages.
-- Insert pages from another PDF.
-- Insert images converted into PDF pages.
+merge, split (multi-output), extract, delete, rotate (90/180/270), reorder,
+insertPdf, insertImage. Runs **in the browser** for small/medium documents and is
+**proxied to Cloud Run** for large ones (and for headless CLI/agent use).
 
 ### 2.2 To PDF Conversion
 
-The first conversion direction is input file to PDF only. PDF to Word, PDF to
-image, OCR extraction, text extraction, and reverse conversion are out of
-scope for the initial version.
+Input → PDF only (no reverse conversion, no OCR in v1).
 
-Initial guaranteed formats:
+- **Browser:** PDF, JPG/JPEG/JFIF, PNG natively; plus APNG, WebP, AVIF, GIF, BMP,
+  ICO, TIFF, HEIC/HEIF via lazily-loaded decoders.
+- **Cloud Run:** the same conversions on large inputs, **plus Office→PDF**
+  (docx/xlsx/pptx, …) via LibreOffice — which is infeasible on Cloudflare.
 
-- PDF input for organization and insertion.
-- JPG / JPEG / JFIF.
-- PNG.
+### 2.3 What runs where
 
-Browser GUI extended formats:
+| Work | Browser (free) | Worker (free) | Cloud Run |
+|---|:--:|:--:|:--:|
+| Serve SPA / `openapi.json` | — | ✅ | — |
+| `capabilities`, `validate-plan` | — | ✅ light | — |
+| Organize / To-PDF (small–medium) | ✅ | proxy | ✅ |
+| Organize / To-PDF (large) | ✋ | proxy | ✅ |
+| **Office→PDF** | ✋ | proxy | ✅ |
+| Heavy compress / repair / linearize | ✋ | proxy | ✅ |
 
-- APNG.
-- WebP.
-- AVIF.
-- GIF.
-- BMP.
-- ICO.
-- TIFF.
-- HEIC / HEIF.
+## 3. Non-Goals (this repo)
 
-API extended formats should be added only after Cloudflare runtime validation,
-because Pages Functions do not provide DOM, Canvas, or browser image decoding.
-Those formats need pure JavaScript or WASM decoders.
-
-Deferred formats:
-
-- DOCX, XLSX, PPTX.
-- DOC, XLS, PPT.
-- ODT, ODS, ODP.
-- PSD, JP2, TGA, PCX, PNM.
-- RAW photo formats.
-
-Office document conversion is not an initial API requirement. It should be
-treated as a separate feasibility track because LibreOffice-class conversion in
-WASM may exceed practical Cloudflare Pages Functions limits.
-
-## 3. Non-Goals
-
-- No reverse conversion from PDF to Office, image, text, or HTML in the initial
-  release.
-- No OCR in the initial release.
-- No AI summarization, translation, or chat over PDF in the initial release.
-- No external conversion server.
-- No persistent storage of uploaded files unless a later async job system
-  explicitly introduces R2 with retention rules.
-- No promise of perfect editing of existing PDF text content. Page-level
-  organization and To PDF conversion are the primary scope.
+- **No heavy server-side compute on Cloudflare.** Large/Office/native work is
+  proxied to Cloud Run, implemented in `securepdf-run`.
+- No reverse conversion (PDF→Office/image/text/HTML) in v1 (both repos).
+- No OCR, no AI summarization/translation/chat in v1.
+- **No remote/URL inputs** (no SSRF surface).
+- No persistent storage of uploads (the Worker never stores; Cloud Run retention,
+  if any, is defined in its repo).
+- No Cloud Run service code, Dockerfile, or GCP infra in this repo.
 
 ## 4. Architecture
 
 ### 4.1 Package Layout
 
-Recommended monorepo layout:
-
 ```text
 securePDF/
   apps/
-    web/              # Cloudflare Pages frontend
-    cli/              # npm CLI package
+    web/                 # Vite + React 19 + MUI 6 SPA (local-first)
+    cli/                 # npm CLI: local engine + --endpoint (→ Worker)
+    worker/              # Cloudflare Worker: static host + light API + proxy
+      src/index.ts
   packages/
-    core/             # Runtime-neutral PDF operation engine
-    schema/           # Operation schema, validation, OpenAPI helpers
-    codecs/           # Optional image/document decoders
-  functions/
-    api/
-      v1/
-        organize.ts   # Pages Functions endpoint
-        convert.ts
-        capabilities.ts
-    openapi.json.ts
+    schema/              # Versioned operation schema, validation, OpenAPI gen
+    core/                # Runtime-neutral PDF engine (@cantoo/pdf-lib)
+    codecs/              # Lazily-loaded image decoders
+  fixtures/
+  wrangler.jsonc         # Static Assets + run_worker_first + CLOUD_RUN_URL var
   docs/
-    architecture.md
-    api.md
-    security.md
 ```
 
-If starting smaller, use a single Vite app and split packages after the first
-working prototype:
-
-```text
-securePDF/
-  src/
-    core/
-    schema/
-    web/
-  functions/
-  bin/
-```
+`packages/{schema,core,codecs}` are **shared with the Cloud Run repo** (D12):
+they become publishable (`@securepdf/*` on npm) when `securepdf-run` is created;
+until then they're raw-TS internal packages bundled in-repo.
 
 ### 4.2 Shared Core
 
-The core should be written as runtime-neutral TypeScript:
-
-- Accept `ArrayBuffer`, `Uint8Array`, or `ReadableStream` where practical.
-- Return binary PDF output plus structured warnings.
-- Avoid browser-only APIs inside `packages/core`.
-- Avoid Node-only APIs inside `packages/core`.
-- Put browser-specific file handling in `apps/web`.
-- Put CLI filesystem handling in `apps/cli`.
-- Put request parsing in `functions/api`.
-
-Core libraries:
-
-- `pdf-lib` for merge, page copy, insert, delete, rotate, reorder, and image
-  embedding.
-- A qpdf WASM wrapper can be evaluated later for encrypted PDFs, repair,
-  linearization, or compression.
+Runtime-neutral TypeScript in `packages/core` (no browser-only or Node-only APIs),
+using **`@cantoo/pdf-lib`**. Buffer-based (no streaming parse). The **same code**
+runs in the browser, the Node CLI, and Cloud Run. `packages/codecs` wraps image
+decoders behind one lazily-imported interface. Rendering (thumbnails) uses
+**`pdfjs-dist`** in the GUI only — `pdf-lib` cannot rasterize.
 
 ### 4.3 Operation Schema
 
-Use a versioned JSON schema as the stable contract across GUI, CLI, and API.
-
-Example:
+Versioned JSON schema; the single contract across GUI/CLI/Worker/Cloud Run.
 
 ```json
 {
   "version": "1",
-  "inputs": [
-    { "id": "a", "filename": "a.pdf", "type": "application/pdf" },
-    { "id": "b", "filename": "b.pdf", "type": "application/pdf" }
-  ],
+  "inputs": [{ "id": "a", "filename": "a.pdf", "type": "application/pdf" }],
   "operations": [
     { "op": "merge", "inputs": ["a", "b"] },
     { "op": "rotate", "pages": "2-4", "degrees": 90 },
     { "op": "delete", "pages": "7" }
   ],
-  "output": {
-    "format": "pdf",
-    "filename": "output.pdf"
-  }
+  "output": { "format": "pdf", "filename": "output.pdf" }
 }
 ```
 
-Schema requirements:
-
-- Include `version`.
-- Use stable operation names.
-- Validate page ranges before running operations.
-- Validate input references before loading files.
-- Return structured errors with machine-readable `code` fields.
-- Support dry-run validation.
-
-Suggested operation names:
-
-- `merge`
-- `split`
-- `extract`
-- `delete`
-- `rotate`
-- `reorder`
-- `insertPdf`
-- `insertImage`
-- `convertToPdf`
+- **Working-document model:** operations apply sequentially to a single working
+  doc; the first op (usually `merge`) establishes it. `insertPdf`/`insertImage`
+  take an `at` index. Ranges resolve against the working doc at that step.
+- **Multi-output:** `split`/`extract` may emit N results; `output.container:
+  "zip"` returns them as one archive (API), N files (CLI), or N downloads (GUI).
+- **Page-range grammar (pinned):** 1-based, inclusive; comma-separated `N` |
+  `N-M` | `N-end` | `last` | `even` | `odd`; whitespace tolerant.
+- Stable op names: `merge`, `split`, `extract`, `delete`, `rotate`, `reorder`,
+  `insertPdf`, `insertImage`, `convertToPdf`. `version` required; unknown ops
+  rejected; bump to `"2"` only on a breaking change. `/openapi.json` is
+  **generated from this schema**.
 
 ## 5. Browser GUI Plan
 
-The browser GUI should behave like a real document tool, not a landing page.
-The first screen should be the working area.
+First screen is the working area, **local-first** (files stay on-device unless
+downloaded). Views: import area; PDF.js thumbnail grid; selected-page toolbar;
+operation queue; output settings; export; optional CLI/API command preview.
+Controls: drag-and-drop; click/shift-click/range selection; rotate; delete;
+move; insert; split/extract dialog; merge-order list; download.
 
-Primary views:
-
-- File import area.
-- Page thumbnail grid.
-- Selected-page toolbar.
-- Operation queue or history.
-- Output settings.
-- Export button.
-- Optional command preview showing equivalent CLI/API request.
-
-Expected controls:
-
-- Drag and drop files.
-- Page selection by click, shift-click, and range input.
-- Rotate left/right buttons.
-- Delete button.
-- Move before/after controls.
-- Insert file action.
-- Split/extract dialog.
-- Merge order list.
-- Download result.
-
-Implementation notes:
-
-- Use Web Workers for large PDF work where possible.
-- Keep files in memory only unless the user explicitly saves/downloads.
-- Do not use analytics, external fonts, or external CDN assets by default.
-- Provide a visible capabilities panel that distinguishes browser support from
-  API support.
+- **Stack:** Vite + React 19 + MUI 6 + Emotion. `pdfjs-dist` (Web Worker) renders;
+  `@cantoo/pdf-lib` manipulates (off the main thread for large work).
+- **Capabilities panel** distinguishing local (browser) from remote (Cloud Run
+  via the Worker proxy) — and showing when remote is unconfigured.
+- For operations the browser can't do (Office→PDF, very large files), the GUI
+  offers **"process on server"**, which POSTs to the same-origin Worker (proxied
+  to Cloud Run). Same-origin ⇒ no CORS.
+- **Accessibility** (axe/Lighthouse) and a **Japanese UI** (i18n) are first-class.
 
 ## 6. CLI Plan
 
-The CLI should be friendly to humans and AI agents.
-
-Package goals:
-
-- Publishable as an npm package later.
-- Can run locally without network for supported local operations.
-- Can call a configured securePDF API endpoint.
-- Can print JSON results and structured errors.
-
-Example commands:
+Friendly to humans and AI agents. **Local engine** (`@securepdf/core`, no network)
+for what runs locally; **`--endpoint`** points at a securePDF Worker URL, which
+proxies heavy work to Cloud Run — so the CLI targets **one** endpoint regardless
+of where the work runs.
 
 ```bash
 securepdf capabilities --endpoint https://pdf.example.com
-
-securepdf merge a.pdf b.pdf -o output.pdf
-
-securepdf organize \
-  --endpoint https://pdf.example.com \
-  --input a=a.pdf \
-  --input b=b.pdf \
-  --plan plan.json \
-  -o output.pdf
-
-securepdf convert image.jpg --to pdf -o image.pdf
+securepdf merge a.pdf b.pdf -o output.pdf                 # local
+securepdf organize --endpoint https://pdf.example.com \   # remote (proxied)
+  --input a=a.pdf --input b=b.pdf --plan plan.json -o output.pdf
+securepdf convert deck.pptx --to pdf --endpoint https://pdf.example.com -o deck.pdf
 ```
 
-Agent-focused flags:
-
-- `--json`
-- `--dry-run`
-- `--endpoint`
-- `--api-key`
-- `--no-network`
-- `--max-file-size`
-- `--timeout`
-
-CLI output should never rely on prose only. Every command that may be used by
-an agent should support a JSON result shape.
+Agent flags: `--json`, `--dry-run`, `--endpoint`, `--api-key`, `--no-network`,
+`--max-file-size`, `--timeout`. Every agent-usable command supports JSON output.
 
 ## 7. API Plan
 
+One API surface on the Worker. Light endpoints are served by the Worker; heavy
+endpoints are **streamed through** to Cloud Run (D11).
+
 ### 7.1 Endpoints
 
-Initial endpoints:
-
 ```http
-GET  /api/v1/capabilities
-GET  /openapi.json
-POST /api/v1/organize
-POST /api/v1/convert/to-pdf
-POST /api/v1/validate-plan
+GET  /api/v1/capabilities       # light — served by the Worker
+GET  /openapi.json              # light — generated from the schema
+POST /api/v1/validate-plan      # light — schema + declared page counts, NO parsing
+POST /api/v1/organize           # PROXY → Cloud Run
+POST /api/v1/convert/to-pdf     # PROXY → Cloud Run
+# future, in Cloud Run, proxied:
+POST   /api/v1/jobs   GET /api/v1/jobs/:id   GET /api/v1/jobs/:id/result   DELETE …
 ```
 
-Future async endpoints:
+### 7.2 Request / Response
 
-```http
-POST   /api/v1/jobs
-GET    /api/v1/jobs/:id
-GET    /api/v1/jobs/:id/result
-DELETE /api/v1/jobs/:id
-```
+`multipart/form-data`: a JSON `plan` part plus binary input parts keyed by id
+(see [`api.md`](./api.md)). Responses: `application/pdf`, `application/zip`
+(multi-output), or the JSON error envelope with stable `code`s and a `requestId`.
+Output filenames are sanitized and RFC 5987-encoded (Japanese-safe).
 
-The initial API should be synchronous and limited to small and medium files.
-Async jobs should only be added if R2, Queues, or Workflows are introduced with
-explicit retention and deletion rules.
+### 7.3 The proxy (free-tier-safe)
 
-### 7.2 Request Format
+The Worker maps `…/api/v1/X` → `${CLOUD_RUN_URL}/X`, **streams** `request.body`
+into the subrequest (no buffering, no PDF parsing), attaches the Cloud Run
+credential, and streams the response back. This is almost pure I/O → fits the
+**10 ms** free CPU budget and uses **1/50** free subrequests. Inbound bodies are
+capped at the **free 100 MB** limit; larger needs a future direct path (OQ2). If
+`CLOUD_RUN_URL` is unset, heavy endpoints return `503 BACKEND_NOT_CONFIGURED`.
 
-Use `multipart/form-data` for binary input plus a JSON operation plan.
+### 7.4 Auth
 
-Example:
+Clients authenticate to the **Worker** (`Authorization: Bearer <token>`, optional
+Turnstile for browser origin, Cloudflare rate limiting). The Worker holds the
+**Cloud Run** credential; Cloud Run is **private** (OQ1). No file persistence.
 
-```bash
-curl -X POST https://pdf.example.com/api/v1/organize \
-  -F 'plan={"version":"1","operations":[{"op":"merge","inputs":["a","b"]}],"output":{"format":"pdf"}};type=application/json' \
-  -F 'a=@a.pdf;type=application/pdf' \
-  -F 'b=@b.pdf;type=application/pdf' \
-  -o output.pdf
-```
+## 8. Cloudflare Free-Tier Budget (what keeps us free)
 
-Response modes:
+The design is governed by the free limits below; staying inside them is why
+nothing here needs Workers Paid.
 
-- `application/pdf` for successful binary output.
-- `application/json` for validation, dry-run, capabilities, and errors.
+| Free limit | Value | How securePDF stays inside |
+|---|---|---|
+| CPU / request | **10 ms** | Worker only serves JSON, validates plans (no parsing), and **streams** the proxy — all sub-millisecond. Heavy compute is in the browser or Cloud Run. |
+| Isolate memory | **128 MB** | Worker never holds file bytes (streaming proxy). Heavy in-memory work is browser/Cloud Run. |
+| Inbound body | **100 MB** (Free/Pro) | Enforced cap for proxied uploads; bigger → future direct path (OQ2). |
+| Subrequests | **50** / request | Proxy uses 1. |
+| Requests/day | **100,000** | Static asset hits don't count; only `/api/*` invocations do. |
+| Script bundle (gzip) | **3 MB** | Worker ships no decoder WASM (browser/Cloud Run own that) → tiny bundle. |
+| Static assets | 20,000 files, 25 MiB/file | SPA + PDF.js worker fit easily. |
 
-Error shape:
+Sources: [Workers limits](https://developers.cloudflare.com/workers/platform/limits/),
+[Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/).
+Cloud Run's budget (32 GiB / 8 vCPU / 60 min) lives in
+[`CLOUD_RUN_BOUNDARY.md`](./CLOUD_RUN_BOUNDARY.md) / the `securepdf-run` repo.
 
-```json
-{
-  "ok": false,
-  "error": {
-    "code": "INVALID_PAGE_RANGE",
-    "message": "Page range 10-12 exceeds the 8-page document.",
-    "details": {
-      "input": "a",
-      "pageCount": 8
-    }
-  }
-}
-```
+### 8.1 Capability matrix
 
-### 7.3 API Authentication
+| Capability | Browser | Worker | Cloud Run | Notes |
+|---|:--:|:--:|:--:|---|
+| Serve SPA / OpenAPI | — | ✅ | — | free static + light |
+| `capabilities` / `validate-plan` | — | ✅ | — | no PDF parsing |
+| Organize (small–medium) | ✅ | proxy | ✅ | `@cantoo/pdf-lib` |
+| Organize (large) | ✋ | proxy | ✅ | 128 MB browser/isolate limit |
+| JPG/PNG → PDF | ✅ | proxy | ✅ | native embed |
+| WebP/TIFF/BMP/ICO/GIF → PDF | ✅ | proxy | ✅ | jSquash/utif2/pure-JS |
+| AVIF/HEIC → PDF | ✅ | proxy | ✅ | WASM weight → browser/Cloud Run, not Worker |
+| **Office → PDF** | ✋ | proxy | ✅ | LibreOffice (Cloud Run only) |
+| Compress / repair / linearize | ✋ | proxy | ✅ | qpdf/Ghostscript (Cloud Run) |
 
-Initial public demo:
+## 9. Security and Privacy
 
-- No account system.
-- Strict file size limits.
-- Strict operation limits.
-- Rate limiting through Cloudflare controls if available.
+- **Browser local-first** is the privacy default: files never leave the device for
+  on-device operations. Advertise which operations are local.
+- Worker: **no file storage, no payload logging** (only `requestId` + coarse
+  metadata); streaming proxy never parses or buffers file bytes; sanitize output
+  filenames (RFC 5987); centralizes auth and keeps **Cloud Run private**.
+- Schema validation rejects unknown ops; magic-byte allowlist and enforced caps
+  (size/page/output) live where files are actually parsed (browser, Cloud Run).
+- No remote/URL inputs (no SSRF). Dependency audit for parsing libs.
+- Cloud Run-specific hardening (bomb/object-graph guards on native tools, zip-slip
+  on archives) is specified in `securepdf-run` against this contract.
 
-Production API:
+## 10. Testing
 
-- API key header: `Authorization: Bearer <token>`.
-- Optional Turnstile for browser-origin requests.
-- No file persistence by default.
-- Add request IDs for debugging.
+Unit (Vitest, Node + Workers runtime via `@cloudflare/vitest-pool-workers`):
+page-range parser (property-based), schema validation, merge/split(multi-output)/
+extract/delete/reorder, rotation, image→PDF sizing, per-format decode,
+error-code stability, round-trips (merge→split, rotate×4 = identity).
 
-## 8. Cloudflare Constraints To Validate
+Integration (Playwright): GUI import/export smoke; CLI local op; CLI `--endpoint`
+op against a **mock Worker**; **Worker proxy** smoke (mock Cloud Run upstream —
+asserts streaming, header/auth pass-through, `503` when unconfigured);
+`/openapi.json` schema validation.
 
-Before committing to each runtime feature, validate the current Cloudflare
-limits from official documentation:
+Fixtures (`fixtures/`): 1/3-page, rotated, encrypted, corrupt, bomb, large-page
+PDFs; JPG portrait/landscape; transparent PNG; multipage TIFF and HEIC when added.
+(Office fixtures live with `securepdf-run`.)
 
-- Pages static asset size.
-- Pages Functions compatibility with required packages.
-- Worker script size.
-- Worker memory.
-- Request body size.
-- CPU time and wall time.
-- FormData parsing behavior for binary files.
-- WASM module size and startup time.
+## 11. Milestones (this repo)
 
-Initial Cloudflare API compatibility matrix:
+### Milestone 0 — Project Setup ✅ (scaffold built & verified)
+pnpm workspace, TS strict, ESLint/Prettier, Vitest/Playwright, Workers Static
+Assets build, CI, fixtures, package skeletons.
 
-| Capability | Initial API | Browser GUI | Notes |
-|---|---:|---:|---|
-| PDF merge | Yes | Yes | `pdf-lib` |
-| PDF split | Yes | Yes | `pdf-lib` |
-| PDF extract | Yes | Yes | `pdf-lib` |
-| PDF delete | Yes | Yes | `pdf-lib` |
-| PDF rotate | Yes | Yes | `pdf-lib` |
-| PDF reorder | Yes | Yes | `pdf-lib` |
-| PDF insert PDF pages | Yes | Yes | `pdf-lib` |
-| JPG/PNG to PDF | Yes | Yes | `pdf-lib` image embedding |
-| WebP/AVIF/GIF/BMP to PDF | Validate | Yes | API requires decoder strategy |
-| TIFF to PDF | Validate | Yes | Multipage handling required |
-| HEIC/HEIF to PDF | Validate | Yes | WASM size risk |
-| Office to PDF | No | Deferred | Separate feasibility track |
+### Milestone 1 — Core Schema & PDF Organization
+schema + validator (version policy, multi-output, pipeline), page-range parser,
+organize ops on `@cantoo/pdf-lib`, unit tests (Node + Workers).
 
-## 9. Security And Privacy Plan
+### Milestone 2 — Browser GUI MVP
+import, PDF.js thumbnails, selection, organization toolbar, download, command/API
+preview, "process on server" hook (disabled until a backend is configured),
+baseline a11y + Japanese i18n.
 
-Security goals:
+### Milestone 3 — CLI MVP
+local commands; `--json`/`--dry-run`/`--no-network`; `--endpoint` mode; structured
+errors.
 
-- Do not persist uploaded files in the initial API.
-- Do not log file contents.
-- Do not log operation payloads if filenames may contain sensitive data.
-- Enforce content-type and magic-byte validation.
-- Enforce maximum file count, file size, page count, and output size.
-- Return deterministic JSON errors.
-- Keep parser failures isolated from the UI thread.
-- Use dependency review for PDF/image parsing libraries.
-- Add abuse limits before public API exposure.
+### Milestone 4 — Light Worker + Proxy
+`/capabilities` (local vs remote), `/validate-plan`, `/openapi.json` (generated),
+streaming **proxy** for `organize` + `convert/to-pdf` with `CLOUD_RUN_URL` +
+auth + `503` when unset; Workers-runtime tests. (No heavy PDF code here.)
 
-Privacy messaging:
+### Milestone 5 — Extended Browser Conversion
+WebP/AVIF/GIF/BMP/ICO/TIFF, then HEIC/HEIF in the browser; same `codecs` package
+reused server-side by Cloud Run later.
 
-- Browser GUI can advertise local-only processing for browser-executed
-  operations.
-- API mode must clearly state that files are sent to the configured Cloudflare
-  endpoint for processing.
-- CLI must make endpoint use explicit and support `--no-network`.
+### Milestone 6 — Publish Shared Packages
+Build `@securepdf/{schema,core,codecs}` to JS + d.ts, make publishable for
+`securepdf-run` to consume (OQ3); dependency-audit workflow; public docs/examples.
 
-## 10. Testing Plan
-
-Unit tests:
-
-- Page range parser.
-- Operation schema validation.
-- Merge operation.
-- Split operation.
-- Extract/delete/reorder behavior.
-- Rotation metadata.
-- Image to PDF page sizing.
-- Error code stability.
-
-Integration tests:
-
-- Browser GUI import and export smoke test.
-- CLI local operation smoke test.
-- CLI endpoint operation smoke test.
-- Pages Functions multipart request smoke test.
-- `/openapi.json` schema validation.
-
-Fixture files:
-
-- 1-page PDF.
-- 3-page PDF.
-- Rotated PDF.
-- Encrypted PDF.
-- Corrupt PDF.
-- Large-page-count PDF.
-- JPG portrait and landscape.
-- PNG with transparency.
-- TIFF multipage when TIFF support is added.
-- HEIC sample when HEIC support is added.
-
-Manual verification:
-
-- Compare page counts before and after each operation.
-- Render output PDF thumbnails with PDF.js.
-- Open output in at least one external PDF viewer.
-- Test files with Japanese filenames.
-- Test drag and drop and CLI paths containing spaces.
-
-## 11. Milestones
-
-### Milestone 0: Project Setup
-
-- Initialize package manager and TypeScript.
-- Add lint, format, and test commands.
-- Add Cloudflare Pages build setup.
-- Add basic CI.
-- Add fixture directory.
-
-### Milestone 1: Core Schema And PDF Organization
-
-- Implement operation schema.
-- Implement page range parser.
-- Implement merge, split, extract, delete, rotate, reorder, and insert PDF.
-- Add unit tests.
-
-### Milestone 2: Browser GUI MVP
-
-- Build file import.
-- Build PDF thumbnail grid.
-- Build page selection.
-- Build organization toolbar.
-- Build result download.
-- Add equivalent command/API request preview.
-
-### Milestone 3: CLI MVP
-
-- Add local CLI commands.
-- Add `--json`, `--dry-run`, and `--no-network`.
-- Add endpoint mode for API requests.
-- Add structured error handling.
-
-### Milestone 4: Pages Functions API MVP
-
-- Add `/api/v1/capabilities`.
-- Add `/api/v1/validate-plan`.
-- Add `/api/v1/organize`.
-- Add `/api/v1/convert/to-pdf` for JPG and PNG.
-- Add `/openapi.json`.
-- Add Cloudflare runtime tests.
-
-### Milestone 5: Extended Image Conversion
-
-- Add browser support for WebP, AVIF, GIF, BMP, ICO.
-- Add TIFF browser support.
-- Add HEIC/HEIF browser support if decoder size is acceptable.
-- Validate which extended formats can safely run inside Pages Functions.
-
-### Milestone 6: Production Hardening
-
-- Add API keys.
-- Add rate limits.
-- Add size/page/output limits.
-- Add dependency audit workflow.
-- Add public documentation.
-- Add examples for curl, OpenAPI clients, and AI agents.
-
-### Milestone 7: Feasibility Tracks
-
-- Evaluate qpdf WASM for encrypted PDFs, repair, and compression.
-- Evaluate Office to PDF conversion feasibility.
-- Evaluate async jobs with R2 retention if synchronous API limits are not
-  enough.
+### Milestone 7 — Hand-off to `securepdf-run`
+Finalize the boundary contract; the Cloud Run repo implements the proxied
+endpoints (Office→PDF, large, heavy compress/repair) against `@securepdf/core`.
+(Out of scope in this repo.)
 
 ## 12. Immediate Next Steps
 
-1. Initialize the repo with TypeScript, Vite, and Cloudflare Pages-compatible
-   tooling.
-2. Create `packages/schema` with the first operation schema and validator.
-3. Create `packages/core` with `pdf-lib` organization primitives.
-4. Add fixture PDFs and unit tests.
-5. Build a minimal GUI that imports two PDFs, merges them, and downloads the
-   result.
-6. Add `/api/v1/capabilities` before any mutating API endpoint.
-7. Add CLI `securepdf capabilities` and `securepdf merge` as the first CLI
-   commands.
-
+1. **(done)** Milestone 0 scaffold (Workers Static Assets, verified).
+2. `packages/schema`: operation schema, validator, page-range grammar, OpenAPI gen.
+3. `packages/core`: `@cantoo/pdf-lib` organize primitives + working-doc pipeline.
+4. `fixtures/` + unit tests (Node + Workers).
+5. Minimal GUI: import two PDFs, merge, download (fully in-browser).
+6. Light Worker: `/capabilities` + `/validate-plan` before wiring the proxy.
+7. CLI `capabilities` + `merge` (local) as the first commands.
