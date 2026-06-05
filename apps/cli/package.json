@@ -1,0 +1,20 @@
+{
+  "name": "securepdf",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "securepdf": "./bin/securepdf.js"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@securepdf/codecs": "workspace:*",
+    "@securepdf/core": "workspace:*",
+    "@securepdf/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  }
+}

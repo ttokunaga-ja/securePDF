@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "secure-pdf",
+  "main": "apps/worker/src/index.ts",
+  "compatibility_date": "2026-06-04",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "apps/web/dist",
+    "binding": "ASSETS",
+    // The Worker handles the light API and /openapi.json; everything else is a
+    // static asset. Heavy /api/v1/organize|convert are proxied to Cloud Run.
+    "run_worker_first": ["/api/*", "/openapi.json"],
+    "not_found_handling": "single-page-application",
+  },
+  "vars": {
+    // Base URL of the private Cloud Run backend (docs/CLOUD_RUN_BOUNDARY.md).
+    // Empty here ⇒ heavy endpoints return 503 BACKEND_NOT_CONFIGURED.
+    // Set per-environment via `wrangler secret put CLOUD_RUN_URL` or env config.
+    "CLOUD_RUN_URL": "",
+  },
+}

@@ -1,0 +1,32 @@
+{
+  "name": "securepdf",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.0.8",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "lint": "prettier --check . && eslint .",
+    "format": "prettier --write .",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "vitest run --passWithNoTests",
+    "build": "pnpm -C apps/web build",
+    "dev:web": "pnpm -C apps/web dev",
+    "dev:worker": "wrangler dev",
+    "deploy": "pnpm build && wrangler deploy",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "prettier": "^3.1.1",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.2.0",
+    "wrangler": "^4.50.0"
+  }
+}

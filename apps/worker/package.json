@@ -1,0 +1,16 @@
+{
+  "name": "@securepdf/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@securepdf/core": "workspace:*",
+    "@securepdf/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250101.0"
+  }
+}
