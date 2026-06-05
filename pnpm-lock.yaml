@@ -103,9 +103,6 @@ importers:
 
   apps/worker:
     dependencies:
-      '@securepdf/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       '@securepdf/schema':
         specifier: workspace:*
         version: link:../../packages/schema

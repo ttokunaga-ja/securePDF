@@ -7,7 +7,6 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@securepdf/core": "workspace:*",
     "@securepdf/schema": "workspace:*"
   },
   "devDependencies": {
