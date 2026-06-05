@@ -4,9 +4,13 @@
   "private": true,
   "type": "module",
   "bin": {
-    "securepdf": "./bin/securepdf.js"
+    "securepdf": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "esbuild src/cli.ts --bundle --platform=node --format=esm --outfile=dist/cli.js --banner:js=\"#!/usr/bin/env node\"",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -15,6 +19,7 @@
     "@securepdf/schema": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.27.0"
   }
 }
