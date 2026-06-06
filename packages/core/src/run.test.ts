@@ -52,6 +52,26 @@ describe('run — organize', () => {
     expect(doc.getPage(1).getRotation().angle).toBe(0)
   })
 
+  it('flips selected pages while preserving page count and size', async () => {
+    const result = await run(plan([{ op: 'flip', pages: '1', axis: 'horizontal' }]), [
+      { id: 'a', bytes: await makePdf(2) },
+    ])
+    expect(result.ok).toBe(true)
+    expect(await pageWidthsOf(result.outputs[0].bytes)).toEqual([110, 120])
+  })
+
+  it('preserves rotation metadata when flipping a rotated page', async () => {
+    const result = await run(
+      plan([
+        { op: 'rotate', pages: '1', degrees: 90 },
+        { op: 'flip', pages: '1', axis: 'horizontal' },
+      ]),
+      [{ id: 'a', bytes: await makePdf(1) }],
+    )
+    const doc = await PDFDocument.load(result.outputs[0].bytes)
+    expect(doc.getPage(0).getRotation().angle).toBe(90)
+  })
+
   it('splits into one file per page', async () => {
     const result = await run(plan([{ op: 'split', everyNPages: 1 }]), [
       { id: 'a', bytes: await makePdf(3) },

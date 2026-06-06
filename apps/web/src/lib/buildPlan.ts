@@ -6,6 +6,8 @@ export interface PageSlot {
   pageIndex: number
   /** Rotation delta in degrees: 0 | 90 | 180 | 270. */
   rotation: number
+  /** Whether the page should be mirrored horizontally. */
+  flipped: boolean
 }
 
 export interface PlanFile {
@@ -16,7 +18,7 @@ export interface PlanFile {
 
 /**
  * Translate the GUI's arranged page list into an operation plan:
- *   merge(all files) → reorder(to the arrangement) → delete(removed) → rotate(groups)
+ *   merge(all files) → reorder(to the arrangement) → delete(removed) → rotate(groups) → flip(group)
  *
  * After merging in file order, pages are numbered 1..N. `reorder` places the kept
  * pages in the user's order (deleted pages pushed to the tail), `delete` trims the
@@ -57,6 +59,13 @@ export function buildPlan(slots: PageSlot[], files: PlanFile[]): OperationPlan {
   })
   for (const [degrees, positions] of groups) {
     operations.push({ op: 'rotate', pages: positions.join(','), degrees })
+  }
+
+  const flipped = slots
+    .map((slot, i) => (slot.flipped ? i + 1 : null))
+    .filter((position): position is number => position !== null)
+  if (flipped.length > 0) {
+    operations.push({ op: 'flip', pages: flipped.join(','), axis: 'horizontal' })
   }
 
   return {

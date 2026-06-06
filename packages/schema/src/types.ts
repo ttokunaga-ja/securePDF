@@ -44,6 +44,14 @@ export interface RotateOp {
   degrees: Degrees
 }
 
+export type FlipAxis = 'horizontal' | 'vertical'
+
+export interface FlipOp {
+  op: 'flip'
+  pages: string
+  axis: FlipAxis
+}
+
 export interface ReorderOp {
   op: 'reorder'
   /** A full 1-based permutation of the working document's current pages. */
@@ -84,6 +92,7 @@ export type Operation =
   | ExtractOp
   | DeleteOp
   | RotateOp
+  | FlipOp
   | ReorderOp
   | InsertPdfOp
   | InsertImageOp
@@ -97,6 +106,7 @@ export const OPERATION_NAMES: readonly OperationName[] = [
   'extract',
   'delete',
   'rotate',
+  'flip',
   'reorder',
   'insertPdf',
   'insertImage',

@@ -45,6 +45,11 @@ describe('validatePlan', () => {
     expect(validatePlan(plan([{ op: 'rotate', pages: '1', degrees: 45 }])).ok).toBe(false)
   })
 
+  it('accepts flip and validates the axis', () => {
+    expect(validatePlan(plan([{ op: 'flip', pages: '1', axis: 'horizontal' }])).ok).toBe(true)
+    expect(validatePlan(plan([{ op: 'flip', pages: '1', axis: 'diagonal' }])).ok).toBe(false)
+  })
+
   it('flags a reference to an undeclared input', () => {
     const result = validatePlan(plan([{ op: 'merge', inputs: ['a', 'z'] }], [{ id: 'a' }]))
     expect(hasCode(result, 'MISSING_INPUT')).toBe(true)

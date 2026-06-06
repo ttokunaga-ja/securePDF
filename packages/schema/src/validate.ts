@@ -175,6 +175,14 @@ function validateOperation(op: unknown, i: number, inputIds: Set<string>, add: A
         })
       }
       break
+    case 'flip':
+      pages(op.pages, 'pages')
+      if (op.axis !== 'horizontal' && op.axis !== 'vertical') {
+        add(ERROR_CODES.INVALID_PLAN, `${at}.axis must be "horizontal" or "vertical".`, {
+          axis: op.axis,
+        })
+      }
+      break
     case 'reorder':
       if (
         !Array.isArray(op.order) ||

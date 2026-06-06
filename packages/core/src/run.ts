@@ -12,6 +12,7 @@ import {
   type ConvertToPdfOp,
   type DeleteOp,
   type ExtractOp,
+  type FlipOp,
   type InsertImageOp,
   type InsertPdfOp,
   type MergeOp,
@@ -102,6 +103,8 @@ async function applyOp(
       return extractOp(op, working)
     case 'rotate':
       return rotateOp(op, working)
+    case 'flip':
+      return flipOp(op, working)
     case 'reorder':
       return reorderOp(op, working)
     case 'insertPdf':
@@ -167,6 +170,29 @@ function rotateOp(op: RotateOp, working: PDFDocument): PDFDocument {
     page.setRotation(toDegrees(next))
   }
   return working
+}
+
+async function flipOp(op: FlipOp, working: PDFDocument): Promise<PDFDocument> {
+  const targets = new Set(parsePageRange(op.pages, working.getPageCount()))
+  const out = await PDFDocument.create()
+  const copied = await out.copyPages(working, working.getPageIndices())
+
+  for (let i = 0; i < copied.length; i++) {
+    const pageNumber = i + 1
+    const page = copied[i]
+    if (targets.has(pageNumber)) {
+      if (op.axis === 'horizontal') {
+        page.scaleContent(-1, 1)
+        page.translateContent(page.getWidth(), 0)
+      } else {
+        page.scaleContent(1, -1)
+        page.translateContent(0, page.getHeight())
+      }
+    }
+    out.addPage(page)
+  }
+
+  return out
 }
 
 async function reorderOp(op: ReorderOp, working: PDFDocument): Promise<PDFDocument> {
