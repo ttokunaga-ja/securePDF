@@ -44,8 +44,9 @@ wrangler secret put GAS_CONVERT_URL   # paste the /exec URL
 wrangler secret put GAS_TOKEN         # paste the SHARED_SECRET
 ```
 
-(`GAS_CONVERT_URL` also has an empty default in `wrangler.jsonc`; a secret
-overrides it. When unset, `/api/v1/convert/office` returns
+(`GAS_CONVERT_URL` and `GAS_TOKEN` are Worker **secrets** — `wrangler.jsonc`
+declares no matching `var` on purpose, since a same-named var would conflict with
+the secret. When unset, `/api/v1/convert/office` returns
 `503 BACKEND_NOT_CONFIGURED` and `capabilities` reports `office-to-pdf` absent.)
 
 Optional (CLI deploy of the script): use [`clasp`](https://github.com/google/clasp)

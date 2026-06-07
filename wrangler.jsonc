@@ -15,14 +15,13 @@
   // Public custom domain. `custom_domain: true` makes `wrangler deploy` create the
   // DNS record + managed TLS cert (the zone takumi-tokunaga.com is on this account).
   "routes": [{ "pattern": "securepdf.takumi-tokunaga.com", "custom_domain": true }],
-  "vars": {
-    // Base URL of the private Cloud Run backend (docs/CLOUD_RUN_BOUNDARY.md).
-    // Empty here ⇒ heavy endpoints return 503 BACKEND_NOT_CONFIGURED.
-    // Set per-environment via `wrangler secret put CLOUD_RUN_URL` or env config.
-    "CLOUD_RUN_URL": "",
-    // Google Apps Script Web App URL for Office→PDF (docs/office-conversion.md).
-    // Empty ⇒ /api/v1/convert/office returns 503. Set the real URL per-environment
-    // (e.g. `wrangler secret put GAS_CONVERT_URL`); GAS_TOKEN is always a secret.
-    "GAS_CONVERT_URL": "",
-  },
+  // Backend config is provided as Worker *secrets* (not vars) so it stays out of
+  // this public repo and avoids the "binding name already in use" conflict a
+  // same-named var would cause:
+  //   wrangler secret put GAS_CONVERT_URL   # GAS /exec URL (Office→PDF)
+  //   wrangler secret put GAS_TOKEN         # shared secret sent to GAS as ?token=
+  //   wrangler secret put CLOUD_RUN_URL     # (future) Cloud Run base URL
+  //   wrangler secret put CLOUD_RUN_TOKEN   # (future) Cloud Run bearer
+  // Unset ⇒ those endpoints return 503 BACKEND_NOT_CONFIGURED. Local dev reads the
+  // same names from .dev.vars (gitignored). See docs/office-conversion.md.
 }
