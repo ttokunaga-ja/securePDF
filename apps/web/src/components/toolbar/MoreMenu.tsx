@@ -1,5 +1,4 @@
 import KeyRoundedIcon from '@mui/icons-material/KeyRounded'
-import PrintIcon from '@mui/icons-material/Print'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
 import { ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material'
 
@@ -13,10 +12,9 @@ interface MoreMenuProps {
   onClose: () => void
   onOpenApiKey: () => void
   onToggleTwoPageView: () => void
-  onPrint: () => void
 }
 
-/** Overflow menu: toggle the two-page view and a print shortcut. */
+/** Overflow menu: view options and authentication settings. */
 export function MoreMenu({
   anchorEl,
   open,
@@ -25,7 +23,6 @@ export function MoreMenu({
   onClose,
   onOpenApiKey,
   onToggleTwoPageView,
-  onPrint,
 }: MoreMenuProps) {
   return (
     <Menu
@@ -58,18 +55,6 @@ export function MoreMenu({
           <KeyRoundedIcon fontSize="small" />
         </ListItemIcon>
         <ListItemText primary={t('toolbar.apiKey')} />
-      </MenuItem>
-      <MenuItem
-        disabled={pagesEmpty}
-        onClick={() => {
-          onClose()
-          onPrint()
-        }}
-      >
-        <ListItemIcon>
-          <PrintIcon fontSize="small" />
-        </ListItemIcon>
-        <ListItemText primary={t('toolbar.print')} />
       </MenuItem>
     </Menu>
   )

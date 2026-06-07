@@ -126,7 +126,6 @@ export function MainToolbar(props: MainToolbarProps) {
         onClose={() => setMenuAnchorEl(null)}
         onOpenApiKey={() => setApiKeyDialogOpen(true)}
         onToggleTwoPageView={props.onToggleTwoPageView}
-        onPrint={props.onPrint}
       />
       {apiKeyDialogOpen && <ApiKeyDialog open onClose={() => setApiKeyDialogOpen(false)} />}
     </Box>
