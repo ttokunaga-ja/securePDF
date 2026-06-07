@@ -1,66 +1,54 @@
 # APIドキュメント
 
-securePDF の HTTP API は、Web UI と同じ操作スキーマを使う自動処理向けインターフェースです。
+securePDF API は、PDF 整理やファイル変換をプログラムから実行したい利用者向けの API です。
 
-軽量な検証や仕様取得は Cloudflare Worker が処理し、PDF 生成や Office 変換など重い処理は変換バックエンドへストリーム転送します。
+画面上で PDF を編集するだけなら API は不要です。外部ツールや自分のスクリプトから securePDF の変換機能を呼び出したい場合に利用してください。
 
-## Base URL
+## はじめに
 
-Web UI と同じオリジンを使います。
+Base URL:
 
 ```text
 https://securepdf.takumi-tokunaga.com
 ```
 
-## 認証
+機械可読の仕様は [`/openapi.json`](/openapi.json) から取得できます。
 
-バックエンド変換が必要なエンドポイントでは、API キーを `X-API-Key` ヘッダーで送信します。
+## API キー
+
+認証が必要な処理では、API キーを `X-API-Key` ヘッダーで送信します。
 
 ```http
 X-API-Key: $SECUREPDF_API_KEY
 Accept: application/json
 ```
 
-API キーは `tkp_` で始まる文字列です。Web UI では、ヘッダー右端の「その他」メニューから「認証」を開いて設定できます。
+API キーは `tkp_` で始まる文字列です。Web 画面では、右上の「その他」メニューから「認証」を開いて設定できます。
+
+Office ファイルの PDF 変換は 1 回あたり 5 クレジットを消費します。API キーが無効な場合やクレジットが不足している場合、API はエラーを返します。
 
 ## エンドポイント
 
-| Method | Path | 用途 |
-| --- | --- | --- |
-| `GET` | `/api/v1/capabilities` | 利用可能なローカル処理・リモート処理を取得 |
-| `GET` | `/openapi.json` | OpenAPI 3.1 仕様を取得 |
-| `POST` | `/api/v1/validate-plan` | plan の構造を検証 |
-| `POST` | `/api/v1/organize` | PDF 整理処理を実行 |
-| `POST` | `/api/v1/convert/to-pdf` | 画像などを PDF へ変換 |
-| `POST` | `/api/v1/convert/office` | Office ファイルを PDF へ変換 |
+| Method | Path | 用途 | 認証 |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/capabilities` | 利用できる処理を確認 | 不要 |
+| `GET` | `/openapi.json` | OpenAPI 仕様を取得 | 不要 |
+| `POST` | `/api/v1/validate-plan` | PDF 操作 plan の形式を検証 | 不要 |
+| `POST` | `/api/v1/organize` | PDF 整理処理を実行 | 処理内容により必要 |
+| `POST` | `/api/v1/convert/to-pdf` | 画像などを PDF へ変換 | 処理内容により必要 |
+| `POST` | `/api/v1/convert/office` | Office ファイルを PDF へ変換 | 必要 |
 
-## capabilities
+## 利用できる処理を確認する
 
 ```bash
 curl https://securepdf.takumi-tokunaga.com/api/v1/capabilities
 ```
 
-レスポンス例:
+レスポンスには、現在の環境で使える入力形式や変換機能が含まれます。Office 変換が利用できない場合は、画面や API でその旨のエラーを返します。
 
-```json
-{
-  "version": "1",
-  "local": {
-    "operations": ["merge", "split", "extract", "delete", "rotate", "flip", "reorder", "insertPdf", "insertImage", "convertToPdf"],
-    "inputFormats": ["application/pdf", "image/jpeg", "image/png"]
-  },
-  "remote": {
-    "available": true,
-    "via": "cloud-run",
-    "adds": ["office-to-pdf"],
-    "maxInputBytes": 104857600
-  }
-}
-```
+## plan を検証する
 
-## validate-plan
-
-`validate-plan` は plan の構造を検証します。ファイル本体は解析しないため、ページ数など実ファイルに依存する検証はブラウザまたは変換バックエンド側で行います。
+API では、どのページをどう扱うかを JSON の `plan` で指定します。`validate-plan` はファイルを送らずに、その `plan` の形式だけを確認するためのエンドポイントです。
 
 ```bash
 curl -X POST https://securepdf.takumi-tokunaga.com/api/v1/validate-plan \
@@ -68,12 +56,12 @@ curl -X POST https://securepdf.takumi-tokunaga.com/api/v1/validate-plan \
   -d '{"version":"1","operations":[],"output":{"format":"pdf"}}'
 ```
 
-## organize / convert
+## PDF を整理する
 
-ファイルを伴う実行系エンドポイントは `multipart/form-data` を使います。
+ファイルを伴う処理は `multipart/form-data` で送信します。
 
-- `plan`: JSON の操作 plan。
-- `a`, `b` など: plan から参照される入力ファイル。
+- `plan`: 実行したい操作を表す JSON。
+- `a`, `b` など: `plan` から参照する入力ファイル。
 
 ```bash
 curl -X POST https://securepdf.takumi-tokunaga.com/api/v1/organize \
@@ -84,7 +72,20 @@ curl -X POST https://securepdf.takumi-tokunaga.com/api/v1/organize \
   -o output.pdf
 ```
 
-## エラー
+## Office ファイルを PDF に変換する
+
+Office 変換では API キーが必要です。
+
+```bash
+curl -X POST https://securepdf.takumi-tokunaga.com/api/v1/convert/office \
+  -H "X-API-Key: $SECUREPDF_API_KEY" \
+  -H 'content-type: application/json' \
+  -d '{"filename":"sample.docx","mimeType":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","fileBase64":"..."}'
+```
+
+レスポンスには、変換後 PDF の base64 文字列が含まれます。Office 変換は 1 回あたり 5 クレジットを消費します。
+
+## エラー時の確認
 
 エラー時は `ok: false` と `error.code` を含む JSON を返します。
 
@@ -98,14 +99,10 @@ curl -X POST https://securepdf.takumi-tokunaga.com/api/v1/organize \
 }
 ```
 
-代表的なコード:
+代表的なエラー:
 
-- `INVALID_PLAN`: plan の構造が不正。
-- `UNAUTHORIZED`: API キーが未指定または無効。
-- `RATE_LIMITED`: レート制限またはクレジット制限。
-- `BACKEND_NOT_CONFIGURED`: 変換バックエンドが未設定。
-- `BACKEND_UNAVAILABLE`: 変換バックエンドへ到達できない。
-
-## OpenAPI
-
-機械可読の仕様は [`/openapi.json`](/openapi.json) から取得できます。
+- `UNAUTHORIZED`: API キーが未指定、または無効です。認証メニューで API キーを確認してください。
+- `RATE_LIMITED`: 利用回数またはクレジットの制限に達しています。
+- `UNSUPPORTED_FORMAT`: 対応していないファイル形式です。
+- `BACKEND_NOT_CONFIGURED`: その変換機能は現在利用できません。
+- `BACKEND_UNAVAILABLE`: 変換処理へ一時的に到達できません。時間を置いて再試行してください。
