@@ -1,35 +1,16 @@
-// Auth/session singleton for the Office conversion path. It stores the issued
-// API key and opens the Google sign-in popup only when ensureApiKey() is called
-// from a backend-converted import. When auth is not configured it is inert
-// (returns null), so Office import falls back to the unauthenticated path.
+// Auth/session singleton for the Office conversion path. It keeps the issued
+// API key in memory for the current page session and opens the Google sign-in
+// popup only when ensureApiKey() is called from a backend-converted import. When
+// auth is not configured it is inert and returns null.
 
 import { t } from '../app/i18n'
 import { AuthApiError, issueApiKey } from './authApi'
 import { type AuthClient, getLoadedAuthClient, loadAuthClient, preloadAuthClient } from './firebase'
 
-const KEY_STORAGE = 'securepdf.apiKey'
 export const API_KEY_REQUEST_URL = 'https://takumi-tokunaga.com/contact/#api-access'
 export const API_KEY_PATTERN = /^tkp_[a-f0-9]{64}$/
 
-function readStoredKey(): string | null {
-  try {
-    return typeof localStorage !== 'undefined' ? localStorage.getItem(KEY_STORAGE) : null
-  } catch {
-    return null
-  }
-}
-
-function storeKey(key: string | null): void {
-  try {
-    if (typeof localStorage === 'undefined') return
-    if (key) localStorage.setItem(KEY_STORAGE, key)
-    else localStorage.removeItem(KEY_STORAGE)
-  } catch {
-    /* ignore storage errors (private mode etc.) */
-  }
-}
-
-let apiKey: string | null = readStoredKey()
+let apiKey: string | null = null
 
 export interface ApiKeyState {
   apiKey: string | null
@@ -58,7 +39,6 @@ function emit(): void {
 
 function setApiKey(next: string): void {
   apiKey = next
-  storeKey(next)
   emit()
 }
 
@@ -76,7 +56,6 @@ export function getApiKey(): string | null {
 
 export function clearApiKey(): void {
   apiKey = null
-  storeKey(null)
   emit()
 }
 

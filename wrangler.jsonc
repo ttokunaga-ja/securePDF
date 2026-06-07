@@ -19,7 +19,7 @@
   // this public repo and avoids the "binding name already in use" conflict a
   // same-named var would cause:
   //   wrangler secret put GAS_CONVERT_URL   # GAS /exec URL (Office→PDF)
-  //   wrangler secret put GAS_TOKEN         # shared secret sent to GAS as ?token=
+  //   wrangler secret put GAS_TOKEN         # shared secret injected into GAS POST body
   //   wrangler secret put CLOUD_RUN_URL     # (future) Cloud Run base URL
   //   wrangler secret put CLOUD_RUN_TOKEN   # (future) Cloud Run bearer
   // Unset ⇒ those endpoints return 503 BACKEND_NOT_CONFIGURED. Local dev reads the

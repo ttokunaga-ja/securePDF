@@ -86,6 +86,18 @@ describe('worker', () => {
     expect(((await res.json()) as { ok: boolean }).ok).toBe(false)
   })
 
+  it('rejects oversized validate-plan requests before reading the body', async () => {
+    const res = await call(
+      new Request('https://x/api/v1/validate-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'content-length': String(512 * 1024 + 1) },
+        body: '{}',
+      }),
+    )
+    expect(res.status).toBe(413)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('PAYLOAD_TOO_LARGE')
+  })
+
   it('returns 503 for heavy endpoints when no backend is configured', async () => {
     const res = await call(new Request('https://x/api/v1/organize', { method: 'POST' }))
     expect(res.status).toBe(503)
@@ -108,7 +120,7 @@ describe('worker', () => {
 describe('worker proxy', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it('streams organize to Cloud Run, stripping /api/v1, dropping host, attaching auth', async () => {
+  it('streams organize to Cloud Run with allowlisted headers and service auth', async () => {
     const calls: { url: string; headers: Headers }[] = []
     vi.stubGlobal(
       'fetch',
@@ -124,7 +136,14 @@ describe('worker proxy', () => {
     const res = await call(
       new Request('https://x/api/v1/organize', {
         method: 'POST',
-        headers: { host: 'x', 'content-type': 'application/octet-stream' },
+        headers: {
+          host: 'x',
+          authorization: 'Bearer attacker',
+          'content-type': 'application/octet-stream',
+          'x-api-key': 'tkp_test',
+          'x-request-id': 'req-1',
+          'x-forwarded-for': '203.0.113.10',
+        },
         body: 'PLAN',
       }),
       makeEnv({ CLOUD_RUN_URL: 'https://run.example.com/', CLOUD_RUN_TOKEN: 'secret' }),
@@ -136,6 +155,33 @@ describe('worker proxy', () => {
     expect(at(calls, 0).url).toBe('https://run.example.com/organize')
     expect(at(calls, 0).headers.get('authorization')).toBe('Bearer secret')
     expect(at(calls, 0).headers.get('host')).toBeNull()
+    expect(at(calls, 0).headers.get('x-api-key')).toBe('tkp_test')
+    expect(at(calls, 0).headers.get('x-request-id')).toBe('req-1')
+    expect(at(calls, 0).headers.get('x-forwarded-for')).toBeNull()
+  })
+
+  it('drops client Authorization when no Cloud Run token is configured', async () => {
+    const calls: { headers: Headers }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init: { headers: Headers }) => {
+        calls.push({ headers: init.headers })
+        return new Response('ok', { status: 200 })
+      }),
+    )
+
+    await call(
+      new Request('https://x/api/v1/organize', {
+        method: 'POST',
+        headers: { authorization: 'Bearer attacker', 'x-api-key': 'tkp_test' },
+        body: 'PLAN',
+      }),
+      makeEnv({ CLOUD_RUN_URL: 'https://run.example.com/' }),
+    )
+
+    expect(calls).toHaveLength(1)
+    expect(at(calls, 0).headers.get('authorization')).toBeNull()
+    expect(at(calls, 0).headers.get('x-api-key')).toBe('tkp_test')
   })
 
   it('maps the nested convert route', async () => {
@@ -198,12 +244,25 @@ describe('office convert', () => {
     expect(body.remote.adds).toContain('office-to-pdf')
   })
 
+  it('requires an API key before using the GAS conversion backend', async () => {
+    const res = await call(
+      new Request('https://x/api/v1/convert/office', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      }),
+      makeEnv({ GAS_CONVERT_URL: 'https://script.google.com/macros/s/abc/exec' }),
+    )
+    expect(res.status).toBe(401)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe('UNAUTHORIZED')
+  })
+
   it('forwards to the GAS web app with the shared-secret token and returns its JSON', async () => {
-    const calls: { url: string }[] = []
+    const calls: { url: string; body: string }[] = []
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
-        calls.push({ url })
+      vi.fn(async (url: string, init: { body?: BodyInit | null }) => {
+        calls.push({ url, body: String(init.body ?? '') })
         return new Response(JSON.stringify({ ok: true, pdfBase64: 'UERG' }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
@@ -213,7 +272,7 @@ describe('office convert', () => {
     const res = await call(
       new Request('https://x/api/v1/convert/office', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'x-api-key': 'tkp_test' },
         body: JSON.stringify({
           mimeType: 'application/msword',
           filename: 'a.doc',
@@ -230,7 +289,8 @@ describe('office convert', () => {
     expect(calls).toHaveLength(1)
     const u = new URL(at(calls, 0).url)
     expect(u.origin + u.pathname).toBe('https://script.google.com/macros/s/abc/exec')
-    expect(u.searchParams.get('token')).toBe('secret')
+    expect(u.searchParams.get('token')).toBeNull()
+    expect(JSON.parse(at(calls, 0).body)).toMatchObject({ token: 'secret', filename: 'a.doc' })
   })
 
   it('proxies office to Cloud Run (forwarding X-API-Key) when CLOUD_RUN_URL is set', async () => {

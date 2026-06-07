@@ -147,7 +147,7 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
             id="securepdf-api-key"
             label={apiKeyLabel}
             value={input}
-            type="text"
+            type="password"
             name="securepdf-api-key"
             autoComplete="off"
             placeholder={t('apiKey.placeholder')}
