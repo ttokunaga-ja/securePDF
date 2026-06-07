@@ -21,6 +21,8 @@ function at<T>(items: readonly T[], index: number): T {
 }
 
 describe('worker', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('serves capabilities with remote disabled when no backend', async () => {
     const res = await call(new Request('https://x/api/v1/capabilities'))
     expect(res.status).toBe(200)
@@ -114,6 +116,48 @@ describe('worker', () => {
   it('falls back to static assets for non-API paths', async () => {
     const res = await call(new Request('https://x/index.html'))
     expect(await res.text()).toBe('asset:/index.html')
+  })
+
+  it('proxies Firebase Auth helper paths to the configured first-party helper origin', async () => {
+    const calls: { url: string; method: string; headers: Headers }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string | URL, init: { method: string; headers: Headers }) => {
+        calls.push({ url: String(url), method: init.method, headers: init.headers })
+        return new Response('helper', {
+          status: 200,
+          headers: {
+            'content-type': 'text/html',
+            'content-security-policy': "frame-ancestors 'self'",
+            'set-cookie': 'ignore=1',
+          },
+        })
+      }),
+    )
+
+    const res = await call(
+      new Request('https://x/__/auth/handler?apiKey=k', { method: 'GET' }),
+      makeEnv({ FIREBASE_AUTH_ORIGIN: 'https://authapi-tt-20260607.firebaseapp.com/' }),
+    )
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('helper')
+    expect(calls).toHaveLength(1)
+    expect(at(calls, 0).url).toBe(
+      'https://authapi-tt-20260607.firebaseapp.com/__/auth/handler?apiKey=k',
+    )
+    expect(at(calls, 0).method).toBe('GET')
+    expect(at(calls, 0).headers.get('host')).toBe('authapi-tt-20260607.firebaseapp.com')
+    expect(res.headers.get('content-security-policy')).toBeNull()
+    expect(res.headers.get('set-cookie')).toBe('ignore=1')
+  })
+
+  it('returns 503 when Firebase Auth helper origin is missing', async () => {
+    const res = await call(new Request('https://x/__/auth/iframe'))
+    expect(res.status).toBe(503)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      'BACKEND_NOT_CONFIGURED',
+    )
   })
 })
 

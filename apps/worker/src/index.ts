@@ -12,6 +12,9 @@
 //         trialAuth/authAPI). Else fall back to the GAS Web App (GAS_CONVERT_URL),
 //         requiring X-API-Key header. GAS_TOKEN is injected into the POST body
 //         (not the URL) to keep it out of logs. 503 when neither is set.
+//   - GET/POST /__/auth/* and /__/firebase/*
+//       → reverse-proxy Firebase Auth helper pages so Firebase Auth can use this
+//         first-party domain when browsers block third-party storage/cookies.
 //
 // The Worker never imports the heavy @securepdf/core or parses file bytes — that
 // would risk the 10 ms CPU / 128 MB / 3 MB-bundle free limits. See
@@ -31,6 +34,8 @@ export interface Env {
   GAS_CONVERT_URL?: string
   /** Shared secret injected into the GAS POST body (never in the URL). */
   GAS_TOKEN?: string
+  /** Firebase Hosting origin that serves the Auth helper endpoints. */
+  FIREBASE_AUTH_ORIGIN?: string
 }
 
 const PROXY_ROUTES = new Set(['/api/v1/organize', '/api/v1/convert/to-pdf'])
@@ -63,6 +68,9 @@ export default {
     }
     if (PROXY_ROUTES.has(pathname)) {
       return proxyToCloudRun(request, env, pathname)
+    }
+    if (isFirebaseAuthHelperPath(pathname)) {
+      return proxyFirebaseAuthHelper(request, env)
     }
     if (pathname.startsWith('/api/')) {
       return json(errorBody('NOT_FOUND', 'Unknown endpoint.'), 404)
@@ -211,6 +219,54 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { 'content-type': 'application/json; charset=utf-8' },
   })
+}
+
+function isFirebaseAuthHelperPath(pathname: string): boolean {
+  return (
+    pathname === '/__/auth' ||
+    pathname.startsWith('/__/auth/') ||
+    pathname.startsWith('/__/firebase/')
+  )
+}
+
+async function proxyFirebaseAuthHelper(request: Request, env: Env): Promise<Response> {
+  const origin = env.FIREBASE_AUTH_ORIGIN?.replace(/\/+$/, '')
+  if (!origin) {
+    return json(
+      errorBody('BACKEND_NOT_CONFIGURED', 'Firebase Auth helper origin is not configured.'),
+      503,
+    )
+  }
+
+  const incoming = new URL(request.url)
+  const target = new URL(incoming.pathname + incoming.search, origin)
+  const headers = new Headers(request.headers)
+  headers.set('host', target.host)
+
+  try {
+    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body
+    const upstream = await fetch(target, {
+      method: request.method,
+      headers,
+      body,
+      redirect: 'manual',
+    })
+    return new Response(upstream.body, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers: firebaseAuthHelperHeaders(upstream.headers),
+    })
+  } catch {
+    return json(errorBody('BACKEND_UNAVAILABLE', 'Firebase Auth helper is unreachable.'), 502)
+  }
+}
+
+function firebaseAuthHelperHeaders(upstream: Headers): Headers {
+  const headers = new Headers(upstream)
+  headers.delete('content-security-policy')
+  headers.delete('content-security-policy-report-only')
+  headers.delete('x-frame-options')
+  return headers
 }
 
 function errorBody(code: string, message: string) {

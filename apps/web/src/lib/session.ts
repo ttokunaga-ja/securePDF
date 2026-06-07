@@ -70,12 +70,15 @@ export function prepareAuthPopup(): void {
   preloadAuthClient()
 }
 
-function isFirebasePopupBlocked(error: unknown): boolean {
+function isFirebasePopupOpenFailure(error: unknown): boolean {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : ''
   return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    String((error as { code?: unknown }).code) === 'auth/popup-blocked'
+    code === 'auth/popup-blocked' ||
+    code === 'auth/popup-closed-by-user' ||
+    code === 'auth/cancelled-popup-request'
   )
 }
 
@@ -98,7 +101,7 @@ async function runPopupSignIn(client: AuthClient): Promise<void> {
     if (client.currentUser()) await client.reauthenticate()
     else await client.signIn()
   } catch (error) {
-    if (isFirebasePopupBlocked(error)) {
+    if (isFirebasePopupOpenFailure(error)) {
       throw new Error(t('import.officeAuthPopupBlocked'))
     }
     throw error

@@ -9,7 +9,7 @@
     "binding": "ASSETS",
     // The Worker handles the light API and /openapi.json; everything else is a
     // static asset. Heavy /api/v1/organize|convert are proxied to Cloud Run.
-    "run_worker_first": ["/api/*", "/openapi.json"],
+    "run_worker_first": ["/api/*", "/openapi.json", "/__/auth", "/__/auth/*", "/__/firebase/*"],
     "not_found_handling": "single-page-application",
   },
   // Public custom domain. `custom_domain: true` makes `wrangler deploy` create the
@@ -24,4 +24,8 @@
   //   wrangler secret put CLOUD_RUN_TOKEN   # (future) Cloud Run bearer
   // Unset ⇒ those endpoints return 503 BACKEND_NOT_CONFIGURED. Local dev reads the
   // same names from .dev.vars (gitignored). See docs/office-conversion.md.
+  "vars": {
+    // Public Firebase Hosting origin for first-party Auth helper reverse proxy.
+    "FIREBASE_AUTH_ORIGIN": "https://authapi-tt-20260607.firebaseapp.com",
+  },
 }
