@@ -159,13 +159,21 @@ of where the work runs.
 ```bash
 securepdf capabilities --endpoint https://pdf.example.com
 securepdf merge a.pdf b.pdf -o output.pdf                 # local
+securepdf rotate input.pdf --pages 1,last --degrees 90 -o rotated.pdf
+securepdf delete input.pdf --pages 2,4-5 -o trimmed.pdf
+securepdf extract input.pdf --pages 1,3-4 -o extracted.pdf
+securepdf flip input.pdf --pages even --axis horizontal -o flipped.pdf
+securepdf reorder input.pdf --order 3,1,2 -o reordered.pdf
+securepdf insert-pdf base.pdf appendix.pdf --at 3 -o inserted.pdf
+securepdf insert-image base.pdf scan.png --at 0 -o with-scan.pdf
+securepdf split input.pdf --every 1 -o page.pdf
 securepdf organize --endpoint https://pdf.example.com \   # remote (proxied)
   --input a=a.pdf --input b=b.pdf --plan plan.json -o output.pdf
 securepdf convert deck.pptx --to pdf --endpoint https://pdf.example.com -o deck.pdf
 ```
 
-Agent flags: `--json`, `--dry-run`, `--endpoint`, `--api-key`, `--no-network`,
-`--max-file-size`, `--timeout`. Every agent-usable command supports JSON output.
+Agent flags: `--json`, `--dry-run`, `--endpoint`, `--api-key`, `--no-network`.
+Every agent-usable command supports JSON output.
 
 ## 7. API Plan
 

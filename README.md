@@ -65,7 +65,22 @@ pnpm -C apps/cli build                       # bundle to apps/cli/dist/cli.js
 node apps/cli/dist/cli.js capabilities --json
 node apps/cli/dist/cli.js merge a.pdf b.pdf -o out.pdf
 node apps/cli/dist/cli.js convert image.png --to pdf -o image.pdf
+node apps/cli/dist/cli.js rotate in.pdf --pages 1,last --degrees 90 -o rotated.pdf
+node apps/cli/dist/cli.js delete in.pdf --pages 2,4-5 -o removed.pdf
+node apps/cli/dist/cli.js extract in.pdf --pages 1,3-4 -o extracted.pdf
+node apps/cli/dist/cli.js flip in.pdf --pages even --axis horizontal -o flipped.pdf
+node apps/cli/dist/cli.js reorder in.pdf --order 3,1,2 -o reordered.pdf
+node apps/cli/dist/cli.js insert-pdf base.pdf appendix.pdf --at 3 -o inserted.pdf
+node apps/cli/dist/cli.js insert-image base.pdf scan.png --at 0 -o with-scan.pdf
+node apps/cli/dist/cli.js split in.pdf --every 1 -o page.pdf
 node apps/cli/dist/cli.js organize --input a=a.pdf --plan plan.json -o out.pdf
+```
+
+Office files use the same `convert` command, but require a configured endpoint:
+
+```bash
+node apps/cli/dist/cli.js convert deck.pptx --to pdf \
+  --endpoint https://securepdf.example.com --api-key "$SECUREPDF_API_KEY" -o deck.pdf
 ```
 
 ## Deploy (Cloudflare, free tier)

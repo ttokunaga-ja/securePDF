@@ -4,10 +4,15 @@
 // configured securePDF endpoint with --endpoint. Every command supports --json.
 
 import { readFileSync, writeFileSync } from 'node:fs'
-import { basename } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 
 import { type FileInput, run } from '@securepdf/core'
 import {
+  type Degrees,
+  type FlipAxis,
+  isOfficeInput,
+  officeMimeFor,
+  type Operation,
   OPERATION_NAMES,
   type OperationPlan,
   SCHEMA_VERSION,
@@ -24,6 +29,7 @@ export interface CliResult {
 interface InputRef {
   id: string
   path: string
+  type?: string
 }
 
 export async function main(argv: string[]): Promise<CliResult> {
@@ -48,6 +54,25 @@ export async function main(argv: string[]): Promise<CliResult> {
         return await mergeCommand(args, json)
       case 'convert':
         return await convertCommand(args, json)
+      case 'rotate':
+        return await rotateCommand(args, json)
+      case 'delete':
+      case 'remove':
+        return await deleteCommand(args, json)
+      case 'extract':
+        return await extractCommand(args, json)
+      case 'flip':
+        return await flipCommand(args, json)
+      case 'reorder':
+        return await reorderCommand(args, json)
+      case 'insert-pdf':
+      case 'insertPdf':
+        return await insertPdfCommand(args, json)
+      case 'insert-image':
+      case 'insertImage':
+        return await insertImageCommand(args, json)
+      case 'split':
+        return await splitCommand(args, json)
       case 'organize':
         return await organizeCommand(args, json)
       case 'validate':
@@ -95,19 +120,144 @@ async function mergeCommand(args: ParsedArgs, json: boolean): Promise<CliResult>
 }
 
 async function convertCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
-  const images = args.positionals.slice(1)
-  if (images.length === 0) throw new CliError('INVALID_PLAN', 'convert needs at least one image')
+  const inputs = args.positionals.slice(1)
+  if (inputs.length === 0) throw new CliError('INVALID_PLAN', 'convert needs at least one input')
   if (args.options.to && args.options.to !== 'pdf') {
     throw new CliError('UNSUPPORTED_FORMAT', `unsupported target: ${args.options.to}`)
   }
-  const refs = images.map((path, i): InputRef => ({ id: `img${i}`, path }))
+  if (inputs.some((path) => isOfficeInput(path))) return convertOfficeCommand(args, json, inputs)
+
+  const refs = inputs.map((path, i): InputRef => ({ id: `img${i}`, path, type: imageType(path) }))
   const plan: OperationPlan = {
     version: SCHEMA_VERSION,
-    inputs: refs.map((r) => ({ id: r.id, filename: basename(r.path) })),
+    inputs: refs.map((r) => ({ id: r.id, filename: basename(r.path), type: r.type })),
     operations: [{ op: 'convertToPdf', inputs: refs.map((r) => r.id) }],
     output: { format: 'pdf', filename: basename(outputPath(args)) },
   }
   return runPlan(plan, refs, args, json)
+}
+
+async function convertOfficeCommand(
+  args: ParsedArgs,
+  json: boolean,
+  inputs: string[],
+): Promise<CliResult> {
+  if (inputs.length !== 1) {
+    throw new CliError('INVALID_PLAN', 'Office conversion supports one file per command')
+  }
+  if (!useEndpoint(args)) {
+    throw new CliError('BACKEND_NOT_CONFIGURED', 'Office conversion needs --endpoint <url>')
+  }
+
+  const path = inputs[0]
+  if (!path) throw new CliError('INVALID_PLAN', 'convert needs an input')
+  if (args.options['dry-run'] === 'true') {
+    return report(json, { ok: true }, 0, () => 'Office conversion request is valid (dry run).')
+  }
+
+  const fileBase64 = Buffer.from(readFileSync(path)).toString('base64')
+  const res = await fetch(`${endpointBase(args)}/api/v1/convert/office`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(args) },
+    body: JSON.stringify({
+      filename: basename(path),
+      mimeType: officeMimeFor(path),
+      fileBase64,
+    }),
+  })
+  const body = (await res.json().catch(() => ({}))) as {
+    ok?: boolean
+    pdfBase64?: string
+    message?: string
+    code?: string
+    error?: { code?: string; message?: string }
+  }
+  if (!res.ok || !body.ok) {
+    throw new CliError(
+      body.error?.code ?? body.code ?? `HTTP_${res.status}`,
+      body.error?.message ?? body.message ?? `Office conversion failed (${res.status})`,
+    )
+  }
+  if (!body.pdfBase64) {
+    throw new CliError('OFFICE_CONVERT_FAILED', 'Office conversion returned no PDF bytes')
+  }
+
+  const out = outputPath(args)
+  writeFileSync(out, Buffer.from(body.pdfBase64, 'base64'))
+  return report(json, { ok: true, outputs: [out] }, 0, () => `Wrote ${out}`)
+}
+
+async function rotateCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const pages = requiredOption(args, 'pages', 'rotate needs --pages <expr>')
+  const degrees = parseDegrees(
+    requiredOption(args, 'degrees', 'rotate needs --degrees <90|180|270>'),
+  )
+  return runSinglePdfCommand(args, json, 'rotate', { op: 'rotate', pages, degrees })
+}
+
+async function deleteCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const pages = requiredOption(args, 'pages', 'delete needs --pages <expr>')
+  return runSinglePdfCommand(args, json, 'delete', { op: 'delete', pages })
+}
+
+async function extractCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const pages = requiredOption(args, 'pages', 'extract needs --pages <expr>')
+  return runSinglePdfCommand(args, json, 'extract', { op: 'extract', pages })
+}
+
+async function flipCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const pages = requiredOption(args, 'pages', 'flip needs --pages <expr>')
+  const axis = parseAxis(args.options.axis ?? 'horizontal')
+  return runSinglePdfCommand(args, json, 'flip', { op: 'flip', pages, axis })
+}
+
+async function reorderCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const order = parseOrder(requiredOption(args, 'order', 'reorder needs --order <pages>'))
+  return runSinglePdfCommand(args, json, 'reorder', { op: 'reorder', order })
+}
+
+async function insertPdfCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const [base, inserted] = args.positionals.slice(1)
+  if (!base || !inserted) {
+    throw new CliError('INVALID_PLAN', 'insert-pdf needs <base.pdf> <insert.pdf>')
+  }
+  const at = parseNonNegativeInt(
+    requiredOption(args, 'at', 'insert-pdf needs --at <index>'),
+    '--at',
+  )
+  const refs: InputRef[] = [
+    { id: 'doc', path: base, type: 'application/pdf' },
+    { id: 'insert', path: inserted, type: 'application/pdf' },
+  ]
+  const op: Operation = { op: 'insertPdf', input: 'insert', at }
+  if (args.options.pages) op.pages = args.options.pages
+  return runPlan(singleOutputPlan(refs, [op], outputPath(args)), refs, args, json)
+}
+
+async function insertImageCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const [base, image] = args.positionals.slice(1)
+  if (!base || !image) {
+    throw new CliError('INVALID_PLAN', 'insert-image needs <base.pdf> <image>')
+  }
+  const at = parseNonNegativeInt(
+    requiredOption(args, 'at', 'insert-image needs --at <index>'),
+    '--at',
+  )
+  const refs: InputRef[] = [
+    { id: 'doc', path: base, type: 'application/pdf' },
+    { id: 'image', path: image, type: imageType(image) },
+  ]
+  return runPlan(
+    singleOutputPlan(refs, [{ op: 'insertImage', input: 'image', at }], outputPath(args)),
+    refs,
+    args,
+    json,
+  )
+}
+
+async function splitCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
+  const op = splitOperation(args)
+  return runSinglePdfCommand(args, json, 'split', op)
 }
 
 async function organizeCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
@@ -158,6 +308,7 @@ async function runPlan(
     id: ref.id,
     bytes: new Uint8Array(readFileSync(ref.path)),
     filename: basename(ref.path),
+    type: ref.type,
   }))
 
   if (useEndpoint(args)) {
@@ -206,9 +357,11 @@ function writeOutputs(outputs: { filename: string; bytes: Uint8Array }[], out: s
     return [out]
   }
   // Multi-output (split): write each next to the requested path's directory.
+  const dir = dirname(out)
   return outputs.map((file) => {
-    writeFileSync(file.filename, file.bytes)
-    return file.filename
+    const target = join(dir, file.filename)
+    writeFileSync(target, file.bytes)
+    return target
   })
 }
 
@@ -227,7 +380,7 @@ function useEndpoint(args: ParsedArgs): boolean {
 }
 
 function authHeaders(args: ParsedArgs): Record<string, string> {
-  return args.options['api-key'] ? { authorization: `Bearer ${args.options['api-key']}` } : {}
+  return args.options['api-key'] ? { 'x-api-key': args.options['api-key'] } : {}
 }
 
 function outputPath(args: ParsedArgs): string {
@@ -244,6 +397,98 @@ function endpointBase(args: ParsedArgs): string {
 
 function asArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+}
+
+function singleOutputPlan(refs: InputRef[], operations: Operation[], out: string): OperationPlan {
+  return {
+    version: SCHEMA_VERSION,
+    inputs: refs.map((r) => ({ id: r.id, filename: basename(r.path), type: r.type })),
+    operations,
+    output: { format: 'pdf', filename: basename(out) },
+  }
+}
+
+function runSinglePdfCommand(
+  args: ParsedArgs,
+  json: boolean,
+  command: string,
+  operation: Operation,
+): Promise<CliResult> {
+  const input = args.positionals[1]
+  if (!input) throw new CliError('INVALID_PLAN', `${command} needs <input.pdf>`)
+  const refs: InputRef[] = [{ id: 'doc', path: input, type: 'application/pdf' }]
+  return runPlan(singleOutputPlan(refs, [operation], outputPath(args)), refs, args, json)
+}
+
+function requiredOption(args: ParsedArgs, key: string, message: string): string {
+  const value = args.options[key]
+  if (!value) throw new CliError('INVALID_PLAN', message)
+  return value
+}
+
+function parseDegrees(value: string): Degrees {
+  const degrees = Number(value)
+  if (degrees !== 90 && degrees !== 180 && degrees !== 270) {
+    throw new CliError('INVALID_PLAN', '--degrees must be 90, 180, or 270')
+  }
+  return degrees
+}
+
+function parseAxis(value: string): FlipAxis {
+  if (value === 'horizontal' || value === 'vertical') return value
+  throw new CliError('INVALID_PLAN', '--axis must be horizontal or vertical')
+}
+
+function parseOrder(value: string): number[] {
+  const order = value
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => parsePositiveInt(part, '--order'))
+  if (order.length === 0) throw new CliError('INVALID_PLAN', '--order must list pages')
+  return order
+}
+
+function splitOperation(args: ParsedArgs): Operation {
+  const modes = [args.options.every, args.options['at-pages'], args.options.ranges].filter(Boolean)
+  if (modes.length !== 1) {
+    throw new CliError(
+      'INVALID_PLAN',
+      'split needs exactly one of --every, --at-pages, or --ranges',
+    )
+  }
+  if (args.options.every) {
+    return { op: 'split', everyNPages: parsePositiveInt(args.options.every, '--every') }
+  }
+  if (args.options['at-pages']) return { op: 'split', atPages: args.options['at-pages'] }
+  const ranges = (args.options.ranges ?? '')
+    .split(';')
+    .map((range) => range.trim())
+    .filter(Boolean)
+  if (ranges.length === 0) throw new CliError('INVALID_PLAN', '--ranges must list page ranges')
+  return { op: 'split', ranges }
+}
+
+function parsePositiveInt(value: string, name: string): number {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 1)
+    throw new CliError('INVALID_PLAN', `${name} must be a positive integer`)
+  return n
+}
+
+function parseNonNegativeInt(value: string, name: string): number {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < 0) {
+    throw new CliError('INVALID_PLAN', `${name} must be a non-negative integer`)
+  }
+  return n
+}
+
+function imageType(path: string): string | undefined {
+  const lower = path.toLowerCase()
+  if (lower.endsWith('.png')) return 'image/png'
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg'
+  return undefined
 }
 
 function formatErrors(errors: ValidationError[] | undefined): string {
@@ -276,7 +521,15 @@ const HELP = `securepdf — PDF organization and To-PDF conversion
 Usage:
   securepdf capabilities [--endpoint URL] [--json]
   securepdf merge <a.pdf> <b.pdf>... [-o out.pdf] [--endpoint URL]
-  securepdf convert <image>... [--to pdf] [-o out.pdf]
+  securepdf convert <image>... [--to pdf] [-o out.pdf] [--endpoint URL]
+  securepdf rotate <input.pdf> --pages <expr> --degrees <90|180|270> [-o out.pdf]
+  securepdf delete <input.pdf> --pages <expr> [-o out.pdf]
+  securepdf extract <input.pdf> --pages <expr> [-o out.pdf]
+  securepdf flip <input.pdf> --pages <expr> [--axis horizontal|vertical] [-o out.pdf]
+  securepdf reorder <input.pdf> --order <pages> [-o out.pdf]
+  securepdf insert-pdf <base.pdf> <insert.pdf> --at <index> [--pages <expr>] [-o out.pdf]
+  securepdf insert-image <base.pdf> <image> --at <index> [-o out.pdf]
+  securepdf split <input.pdf> (--every <n> | --at-pages <expr> | --ranges <expr;expr>) [-o out.pdf]
   securepdf organize --input a=a.pdf [--input b=b.pdf] --plan plan.json [-o out.pdf]
   securepdf validate --plan plan.json [--endpoint URL]
 
@@ -285,9 +538,13 @@ Options:
   -i, --input id=path   Named input (repeatable; for organize)
       --plan <path>     Operation plan JSON
       --endpoint <url>  Run against a securePDF endpoint instead of locally
-      --api-key <key>   Bearer token for --endpoint
+      --api-key <key>   API key for --endpoint (sent as X-API-Key)
       --no-network      Force local execution
       --dry-run         Validate the plan without running it
       --json            Machine-readable JSON output
       --version         Print the schema version
+
+Page expressions:
+  1,3-5,last,even,odd,1-end.  --order uses a comma-separated full permutation.
+  --at is the 0-based insertion slot before the current page at that index.
 `
