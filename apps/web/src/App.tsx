@@ -1,10 +1,9 @@
 import { Box } from '@mui/material'
 import { OFFICE_EXTENSIONS, OFFICE_INPUT_FORMATS } from '@securepdf/schema'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import { srOnly } from './app/a11y'
 import { t } from './app/i18n'
-import { AuthChip } from './components/AuthChip'
 import { InitialDropZone } from './components/InitialDropZone'
 import { MainToolbar } from './components/MainToolbar'
 import { PreviewArea } from './components/PreviewArea'
@@ -20,7 +19,6 @@ import { usePreviewZoom } from './hooks/usePreviewZoom'
 import { useResizablePane } from './hooks/useResizablePane'
 import { MAIN_TOOLBAR_HEIGHT } from './lib/constants'
 import { normalizePdfFilename } from './lib/filename'
-import { initSession } from './lib/session'
 
 /** Accepted import types: PDF and JPEG/PNG (handled in-browser) plus Office
  *  formats (docx/xlsx/pptx, converted server-side via the Worker → GAS backend). */
@@ -58,11 +56,6 @@ export default function App() {
     rotateTargets: actions.rotateTargets,
     flipTargets: actions.flipTargets,
   })
-
-  // Restore a persisted sign-in (no-op when auth is not configured).
-  useEffect(() => {
-    initSession()
-  }, [])
 
   const initialDropEnabled = files.length === 0 && pages.length === 0
 
@@ -153,8 +146,6 @@ export default function App() {
           onOpenFiles={() => openPickerAt()}
         />
       </Box>
-
-      <AuthChip />
     </InitialDropZone>
   )
 }

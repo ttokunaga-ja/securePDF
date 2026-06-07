@@ -62,8 +62,4 @@ export const ja = {
   'import.officeFailed': '「{name}」を PDF に変換できませんでした。',
   'import.officeAuthRequired': 'Office 変換にはサインインが必要です。',
   'import.officeNoCredits': '本日の変換クレジットを使い切りました。',
-
-  'auth.signIn': 'Google でサインイン',
-  'auth.signOut': 'サインアウト',
-  'auth.credits': '残り {remaining}/{limit}',
 } as const
