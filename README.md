@@ -14,9 +14,9 @@ Run repo (`securepdf-run`, reusing `@securepdf/core`). See
 
 > Status: **Deployable MVP (M1–M4 done).** The schema + PDF organize engine, the
 > in-browser GUI, the local CLI, and the light Worker + Cloud Run proxy are
-> implemented, tested (53 unit tests), and verified end-to-end in a browser.
-> Cloud Run (`securepdf-run`) and exotic image codecs are the remaining tracks.
-> See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
+> implemented, unit-tested (Vitest, Node + happy-dom, with coverage), and verified
+> end-to-end in a browser. Cloud Run (`securepdf-run`) and exotic image codecs are
+> the remaining tracks. See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md).
 
 ## Why one engine
 
@@ -50,9 +50,11 @@ pnpm check            # lint + typecheck + test + build
 
 | Command | Does |
 |---|---|
-| `pnpm lint` | Prettier check + ESLint |
+| `pnpm lint` | Prettier check + ESLint (react-hooks, jsx-a11y, import-sort) |
 | `pnpm typecheck` | `tsc --noEmit` across all packages |
-| `pnpm test` | Vitest |
+| `pnpm test` | Vitest (Node + happy-dom projects) |
+| `pnpm coverage` | Vitest with v8 coverage report |
+| `pnpm gen:fixtures` | Regenerate the synthetic `fixtures/` |
 | `pnpm build` | Build the web SPA into `apps/web/dist` |
 | `pnpm deploy` | Build, then `wrangler deploy` |
 
@@ -85,8 +87,9 @@ wrangler secret put CLOUD_RUN_TOKEN          # optional bearer token (keeps it p
 ## Documentation
 
 - [Implementation plan (v3)](docs/IMPLEMENTATION_PLAN.md)
+- [Refactoring & optimization (2026-06)](docs/REFACTORING_PLAN.md) — GUI decomposition, bundle split, tooling
 - [Cloud Run boundary](docs/CLOUD_RUN_BOUNDARY.md) — the two-tier split & contract
-- [Plan audit](docs/PLAN_AUDIT.md)
+- [Plan audit](docs/PLAN_AUDIT.md) — historical (audits the pre-v3 plan)
 - [Decisions](docs/DECISIONS.md)
 - [Architecture](docs/architecture.md) · [API](docs/api.md) · [Security](docs/security.md)
 

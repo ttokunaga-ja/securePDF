@@ -2,27 +2,28 @@
 // working document (docs/IMPLEMENTATION_PLAN.md §4.3). Pure @cantoo/pdf-lib —
 // runs unchanged in the browser, the Node CLI, and Cloud Run.
 
-import { PDFDocument, degrees as toDegrees } from '@cantoo/pdf-lib'
+import { degrees as toDegrees, PDFDocument } from '@cantoo/pdf-lib'
 import {
-  ERROR_CODES,
-  isPlanError,
-  parsePageRange,
-  PlanError,
-  validatePlan,
   type ConvertToPdfOp,
   type DeleteOp,
+  ERROR_CODES,
   type ExtractOp,
   type FlipOp,
   type InsertImageOp,
   type InsertPdfOp,
+  isPlanError,
   type MergeOp,
   type Operation,
   type OperationPlan,
+  parsePageRange,
+  PlanError,
   type ReorderOp,
   type RotateOp,
   type SplitOp,
+  validatePlan,
   type ValidationError,
 } from '@securepdf/schema'
+
 import type { FileInput, OutputFile, RunResult } from './types'
 
 /** Execute a plan against its named inputs. Validates first; never throws. */
@@ -51,9 +52,7 @@ async function execute(
   let working: PDFDocument | null = null
   const ops = plan.operations
 
-  for (let i = 0; i < ops.length; i++) {
-    const op = ops[i]
-
+  for (const [i, op] of ops.entries()) {
     if (op.op === 'merge') {
       working = await mergeOp(op, byId)
       continue
@@ -177,9 +176,8 @@ async function flipOp(op: FlipOp, working: PDFDocument): Promise<PDFDocument> {
   const out = await PDFDocument.create()
   const copied = await out.copyPages(working, working.getPageIndices())
 
-  for (let i = 0; i < copied.length; i++) {
+  for (const [i, page] of copied.entries()) {
     const pageNumber = i + 1
-    const page = copied[i]
     if (targets.has(pageNumber)) {
       if (op.axis === 'horizontal') {
         page.scaleContent(-1, 1)
@@ -320,7 +318,8 @@ function splitGroups(op: SplitOp, count: number): number[][] {
     const starts = parsePageRange(op.atPages, count).filter((s) => s > 1)
     const bounds = [...new Set([1, ...starts])].sort((a, b) => a - b)
     return bounds.map((from, k) => {
-      const to = k + 1 < bounds.length ? bounds[k + 1] - 1 : count
+      const next = bounds[k + 1]
+      const to = next !== undefined ? next - 1 : count
       const group: number[] = []
       for (let p = from; p <= to; p++) group.push(p)
       return group
@@ -338,8 +337,8 @@ async function serializeOne(doc: PDFDocument, filename: string): Promise<OutputF
 async function serializeMany(docs: PDFDocument[], plan: OperationPlan): Promise<OutputFile[]> {
   const stem = outputName(plan).replace(/\.pdf$/i, '')
   const outputs: OutputFile[] = []
-  for (let i = 0; i < docs.length; i++) {
-    outputs.push(await serializeOne(docs[i], `${stem}-${i + 1}.pdf`))
+  for (const [i, doc] of docs.entries()) {
+    outputs.push(await serializeOne(doc, `${stem}-${i + 1}.pdf`))
   }
   return outputs
 }

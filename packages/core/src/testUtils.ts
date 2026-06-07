@@ -6,6 +6,14 @@
 
 import { PDFDocument } from '@cantoo/pdf-lib'
 
+/** Index access that throws instead of yielding `T | undefined`, so tests can
+ *  assert on `outputs[0]` etc. under noUncheckedIndexedAccess without `!`. */
+export function at<T>(items: readonly T[], index: number): T {
+  const item = items[index]
+  if (item === undefined) throw new Error(`No element at index ${index} (length ${items.length}).`)
+  return item
+}
+
 export async function makePdf(pageCount: number): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   for (let i = 0; i < pageCount; i++) doc.addPage([pageWidth(i + 1), 200])

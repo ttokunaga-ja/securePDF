@@ -6,9 +6,9 @@ import { ERROR_CODES, isPlanError } from './errors'
 import { tokenizePageRange } from './pageRange'
 import {
   OPERATION_NAMES,
-  SCHEMA_VERSION,
   type OperationName,
   type OperationPlan,
+  SCHEMA_VERSION,
   type ValidationError,
   type ValidationResult,
 } from './types'

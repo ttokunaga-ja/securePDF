@@ -19,6 +19,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
 
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i]
+    if (token === undefined) continue
 
     if (!token.startsWith('-')) {
       positionals.push(token)

@@ -35,9 +35,10 @@ runs on Cloud Run) while drawing a hard line: **no heavy compute on Cloudflare.*
 
 ### 2.1 PDF Organization
 
-merge, split (multi-output), extract, delete, rotate (90/180/270), reorder,
-insertPdf, insertImage. Runs **in the browser** for small/medium documents and is
-**proxied to Cloud Run** for large ones (and for headless CLI/agent use).
+merge, split (multi-output), extract, delete, rotate (90/180/270), flip
+(horizontal/vertical), reorder, insertPdf, insertImage. Runs **in the browser**
+for small/medium documents and is **proxied to Cloud Run** for large ones (and for
+headless CLI/agent use).
 
 ### 2.2 To PDF Conversion
 
@@ -126,10 +127,10 @@ Versioned JSON schema; the single contract across GUI/CLI/Worker/Cloud Run.
   "zip"` returns them as one archive (API), N files (CLI), or N downloads (GUI).
 - **Page-range grammar (pinned):** 1-based, inclusive; comma-separated `N` |
   `N-M` | `N-end` | `last` | `even` | `odd`; whitespace tolerant.
-- Stable op names: `merge`, `split`, `extract`, `delete`, `rotate`, `reorder`,
-  `insertPdf`, `insertImage`, `convertToPdf`. `version` required; unknown ops
-  rejected; bump to `"2"` only on a breaking change. `/openapi.json` is
-  **generated from this schema**.
+- Stable op names: `merge`, `split`, `extract`, `delete`, `rotate`, `flip`,
+  `reorder`, `insertPdf`, `insertImage`, `convertToPdf`. `version` required;
+  unknown ops rejected; bump to `"2"` only on a breaking change. `/openapi.json`
+  is **generated from this schema** (`OPERATION_NAMES` drives the `oneOf`).
 
 ## 5. Browser GUI Plan
 
@@ -254,10 +255,14 @@ Cloud Run's budget (32 GiB / 8 vCPU / 60 min) lives in
 
 ## 10. Testing
 
-Unit (Vitest, Node + Workers runtime via `@cloudflare/vitest-pool-workers`):
-page-range parser (property-based), schema validation, merge/split(multi-output)/
-extract/delete/reorder, rotation, image→PDF sizing, per-format decode,
-error-code stability, round-trips (merge→split, rotate×4 = identity).
+Unit (Vitest, split into a **Node** project for the engine/CLI/Worker and a
+**happy-dom** project for the React app, with v8 coverage): page-range parser
+(property-based), schema validation, merge/split(multi-output)/extract/delete/
+reorder, rotation, flip, image→PDF sizing, per-format decode, error-code
+stability, round-trips (merge→split, rotate×4 = identity), the GUI's document
+reducer/selectors, the Worker proxy (URL mapping, auth, 502), and CLI arg
+parsing. (Adopting `@cloudflare/vitest-pool-workers` for true Workers-runtime
+Worker tests is a tracked follow-up.)
 
 Integration (Playwright): GUI import/export smoke; CLI local op; CLI `--endpoint`
 op against a **mock Worker**; **Worker proxy** smoke (mock Cloud Run upstream —
@@ -271,8 +276,10 @@ PDFs; JPG portrait/landscape; transparent PNG; multipage TIFF and HEIC when adde
 ## 11. Milestones (this repo)
 
 > Progress (2026-06): **M0–M4 done** — scaffold, core engine, browser GUI, CLI,
-> and the light Worker + proxy are implemented, tested (53 unit tests), and
-> verified (browser E2E + `wrangler deploy --dry-run`). M5–M7 remain.
+> and the light Worker + proxy are implemented, unit-tested (Vitest, Node +
+> happy-dom, with coverage), and verified (browser E2E + `wrangler deploy
+> --dry-run`). The browser GUI has since been refactored to a reducer-backed,
+> component-decomposed architecture with a lazily-loaded engine chunk. M5–M7 remain.
 
 ### Milestone 0 — Project Setup ✅ (scaffold built & verified)
 pnpm workspace, TS strict, ESLint/Prettier, Vitest/Playwright, Workers Static

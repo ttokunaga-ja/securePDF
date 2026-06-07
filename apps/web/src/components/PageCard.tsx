@@ -1,3 +1,7 @@
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import DeleteIcon from '@mui/icons-material/Delete'
 import FlipIcon from '@mui/icons-material/Flip'
@@ -5,22 +9,18 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import RotateLeftIcon from '@mui/icons-material/RotateLeft'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
 import { Box, Card, IconButton, Stack, Tooltip, Typography } from '@mui/material'
-import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist'
-import {
-  useEffect,
-  useRef,
-  useState,
-  type DragEvent,
-  type MouseEvent,
-  type PointerEvent,
-} from 'react'
+import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { type MouseEvent, type PointerEvent, useRef } from 'react'
 
-export const PAGE_CARD_WIDTH = 172
-export const PAGE_CARD_HEIGHT = 244
-const CLICK_MOVE_THRESHOLD = 6
+import { t } from '../app/i18n'
+import { chrome } from '../app/theme'
+import { CLICK_MOVE_THRESHOLD } from '../lib/constants'
+import { PageThumbnail } from './PageThumbnail'
 
 interface Props {
   pdf: PDFDocumentProxy
+  /** Stable sortable id (the page key). */
+  pageKey: string
   pageIndex: number
   rotation: number
   flipped: boolean
@@ -32,18 +32,21 @@ interface Props {
   iconSize: number
   active: boolean
   selected: boolean
+  /** True while this card is part of the block being dragged (dim as a ghost). */
+  isMoving: boolean
   onOpen: () => void
   onToggleSelected: (event: { shiftKey: boolean }) => void
-  onDragStart: () => void
-  onDragEnd: () => void
-  onDropAt: (kind: 'pages' | 'insertSlot') => void
   onRotate: (delta: number) => void
   onFlip: () => void
   onDelete: () => void
+  /** Single-pointer reorder (WCAG 2.2 SC 2.5.7 alternative to dragging). */
+  onMoveUp: () => void
+  onMoveDown: () => void
 }
 
 export function PageCard({
   pdf,
+  pageKey,
   pageIndex,
   rotation,
   flipped,
@@ -55,52 +58,24 @@ export function PageCard({
   iconSize,
   active,
   selected,
+  isMoving,
   onOpen,
   onToggleSelected,
-  onDragStart,
-  onDragEnd,
-  onDropAt,
   onRotate,
   onFlip,
   onDelete,
+  onMoveUp,
+  onMoveDown,
 }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({ id: pageKey })
   const pointerStartRef = useRef<{ x: number; y: number; moved: boolean } | null>(null)
-  const [dropActive, setDropActive] = useState(false)
   const controlOffset = Math.max(6, Math.round(cardWidth * 0.04))
   const pageBadgeFontSize = Math.max(12, Math.min(18, Math.round(cardWidth * 0.075)))
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    let task: RenderTask | null = null
-    let cancelled = false
-
-    void (async () => {
-      const page = await pdf.getPage(pageIndex + 1)
-      if (cancelled) return
-      const base = page.getViewport({ scale: 1, rotation })
-      const availableWidth = Math.max(1, cardWidth - 16)
-      const availableHeight = Math.max(1, cardHeight - 16)
-      const scale = Math.min(availableWidth / base.width, availableHeight / base.height)
-      const viewport = page.getViewport({ scale, rotation })
-      canvas.width = Math.ceil(viewport.width)
-      canvas.height = Math.ceil(viewport.height)
-      task = page.render({ canvas, viewport })
-      try {
-        await task.promise
-      } catch {
-        // Render cancelled by a rotation change or unmount.
-      }
-    })()
-
-    return () => {
-      cancelled = true
-      task?.cancel()
-    }
-  }, [pdf, pageIndex, rotation, cardWidth, cardHeight])
-
   const startPointer = (event: PointerEvent) => {
+    // Let dnd-kit's PointerSensor begin tracking, then record the origin so a
+    // tap (no movement) still counts as a click-to-open rather than a drag.
+    listeners?.onPointerDown?.(event)
     pointerStartRef.current = { x: event.clientX, y: event.clientY, moved: false }
   }
 
@@ -115,24 +90,28 @@ export function PageCard({
   const openIfClick = () => {
     const start = pointerStartRef.current
     pointerStartRef.current = null
-    if (!start?.moved) onOpen()
+    if (!start?.moved && !isDragging) onOpen()
   }
 
   const stopControlClick = (event: MouseEvent) => {
     event.stopPropagation()
   }
 
-  const acceptsPageDrag = (event: DragEvent) =>
-    event.dataTransfer.types.includes('application/x-securepdf-pages') ||
-    event.dataTransfer.types.includes('application/x-securepdf-insert-slot')
-
   return (
     <Card
+      ref={setNodeRef}
       data-page-card
-      draggable
+      data-page-key={pageKey}
       variant="outlined"
+      role="listitem"
       tabIndex={0}
-      aria-label={`${position}/${total}ページを表示`}
+      aria-label={t('card.openPage', { position, total })}
+      aria-keyshortcuts="Control+ArrowUp Control+ArrowDown"
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0 : isMoving ? 0.4 : 1,
+      }}
       onPointerDown={startPointer}
       onPointerMove={trackPointer}
       onClick={openIfClick}
@@ -142,35 +121,6 @@ export function PageCard({
           onOpen()
         }
       }}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move'
-        event.dataTransfer.setData('application/x-securepdf-pages', 'move')
-        pointerStartRef.current = { x: 0, y: 0, moved: true }
-        onDragStart()
-      }}
-      onDragEnd={onDragEnd}
-      onDragEnter={(event) => {
-        if (!acceptsPageDrag(event)) return
-        event.preventDefault()
-        setDropActive(true)
-      }}
-      onDragOver={(event) => {
-        if (!acceptsPageDrag(event)) return
-        event.preventDefault()
-        setDropActive(true)
-      }}
-      onDragLeave={() => setDropActive(false)}
-      onDrop={(event) => {
-        if (!acceptsPageDrag(event)) return
-        event.preventDefault()
-        event.stopPropagation()
-        setDropActive(false)
-        onDropAt(
-          event.dataTransfer.types.includes('application/x-securepdf-pages')
-            ? 'pages'
-            : 'insertSlot',
-        )
-      }}
       sx={{
         position: 'relative',
         flex: '0 0 auto',
@@ -178,14 +128,15 @@ export function PageCard({
         width: cardWidth,
         height: cardHeight,
         cursor: 'grab',
+        touchAction: 'none',
         bgcolor: 'background.paper',
-        borderColor: dropActive ? 'primary.main' : active ? 'primary.main' : 'divider',
+        borderColor: active ? 'primary.main' : 'divider',
         boxShadow: active ? 3 : selected ? 2 : 0,
         overflow: 'hidden',
         '&:active': { cursor: 'grabbing' },
         '&:focus-visible': {
           outline: '3px solid',
-          outlineColor: 'primary.main',
+          outlineColor: chrome.focusRing,
           outlineOffset: 2,
         },
         '&:hover .page-card-controls, &:focus-within .page-card-controls': {
@@ -218,15 +169,24 @@ export function PageCard({
           inset: 0,
           zIndex: 3,
           opacity: selected ? 1 : 0,
+          // Visible/interactive only when selected or hovered (the hover rule on
+          // the card sets these). Crucially we do NOT stop pointerdown here — a
+          // press on empty card area must bubble to the card so a dnd-kit drag can
+          // start; only the buttons below stop pointerdown (so dragging from a
+          // control doesn't move the page).
           pointerEvents: selected ? 'auto' : 'none',
           transition: 'opacity 120ms ease',
+          // Touch devices have no hover: always show the controls so a page can be
+          // selected/rotated/deleted without a pointer hover.
+          '@media (hover: none)': { opacity: 1, pointerEvents: 'auto' },
         }}
       >
-        <Tooltip title="削除">
+        <Tooltip title={t('card.delete')}>
           <IconButton
             size="small"
             color="error"
-            aria-label="削除"
+            aria-label={t('card.delete')}
+            onPointerDown={stopControlClick}
             onClick={(event) => {
               stopControlClick(event)
               onDelete()
@@ -245,11 +205,12 @@ export function PageCard({
             <DeleteIcon />
           </IconButton>
         </Tooltip>
-        <Tooltip title={selected ? '選択解除' : '選択'}>
+        <Tooltip title={selected ? t('card.deselect') : t('card.select')}>
           <IconButton
             size="small"
             color={selected ? 'primary' : 'default'}
-            aria-label={selected ? '選択解除' : '選択'}
+            aria-label={selected ? t('card.deselect') : t('card.select')}
+            onPointerDown={stopControlClick}
             onClick={(event) => {
               stopControlClick(event)
               onToggleSelected({ shiftKey: event.shiftKey })
@@ -271,6 +232,7 @@ export function PageCard({
         <Stack
           direction="row"
           spacing={0.5}
+          onPointerDown={stopControlClick}
           sx={{
             position: 'absolute',
             left: '50%',
@@ -283,10 +245,10 @@ export function PageCard({
             boxShadow: 1,
           }}
         >
-          <Tooltip title="左に回転">
+          <Tooltip title={t('card.rotateLeft')}>
             <IconButton
               size="small"
-              aria-label="左に回転"
+              aria-label={t('card.rotateLeft')}
               onClick={(event) => {
                 stopControlClick(event)
                 onRotate(-90)
@@ -300,11 +262,11 @@ export function PageCard({
               <RotateLeftIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="反転">
+          <Tooltip title={t('card.flip')}>
             <IconButton
               size="small"
               color={flipped ? 'primary' : 'default'}
-              aria-label="反転"
+              aria-label={t('card.flip')}
               onClick={(event) => {
                 stopControlClick(event)
                 onFlip()
@@ -318,10 +280,10 @@ export function PageCard({
               <FlipIcon />
             </IconButton>
           </Tooltip>
-          <Tooltip title="右に回転">
+          <Tooltip title={t('card.rotateRight')}>
             <IconButton
               size="small"
-              aria-label="右に回転"
+              aria-label={t('card.rotateRight')}
               onClick={(event) => {
                 stopControlClick(event)
                 onRotate(90)
@@ -336,27 +298,71 @@ export function PageCard({
             </IconButton>
           </Tooltip>
         </Stack>
-      </Box>
-      <Box
-        sx={{
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          bgcolor: 'grey.50',
-        }}
-      >
-        <canvas
-          ref={canvasRef}
-          style={{
-            maxWidth: '100%',
-            maxHeight: '100%',
-            transform: flipped ? 'scaleX(-1)' : undefined,
-            boxShadow: '0 0 0 1px rgba(0,0,0,0.16)',
-            background: '#fff',
+        <Stack
+          direction="column"
+          spacing={0.5}
+          onPointerDown={stopControlClick}
+          sx={{
+            position: 'absolute',
+            right: controlOffset,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            p: 0.25,
+            borderRadius: 1,
+            bgcolor: 'rgba(255,255,255,0.92)',
+            boxShadow: 1,
           }}
-        />
+        >
+          <Tooltip title={t('card.moveUp')}>
+            <span>
+              <IconButton
+                size="small"
+                aria-label={t('card.moveUp')}
+                disabled={position <= 1}
+                onClick={(event) => {
+                  stopControlClick(event)
+                  onMoveUp()
+                }}
+                sx={{
+                  width: controlSize,
+                  height: controlSize,
+                  '& .MuiSvgIcon-root': { fontSize: iconSize },
+                }}
+              >
+                <ArrowUpwardIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title={t('card.moveDown')}>
+            <span>
+              <IconButton
+                size="small"
+                aria-label={t('card.moveDown')}
+                disabled={position >= total}
+                onClick={(event) => {
+                  stopControlClick(event)
+                  onMoveDown()
+                }}
+                sx={{
+                  width: controlSize,
+                  height: controlSize,
+                  '& .MuiSvgIcon-root': { fontSize: iconSize },
+                }}
+              >
+                <ArrowDownwardIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Stack>
       </Box>
+      <PageThumbnail
+        pdf={pdf}
+        pageIndex={pageIndex}
+        rotation={rotation}
+        flipped={flipped}
+        cardWidth={cardWidth}
+        cardHeight={cardHeight}
+      />
     </Card>
   )
 }

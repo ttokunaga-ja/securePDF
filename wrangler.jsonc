@@ -12,6 +12,9 @@
     "run_worker_first": ["/api/*", "/openapi.json"],
     "not_found_handling": "single-page-application",
   },
+  // Public custom domain. `custom_domain: true` makes `wrangler deploy` create the
+  // DNS record + managed TLS cert (the zone takumi-tokunaga.com is on this account).
+  "routes": [{ "pattern": "securepdf.takumi-tokunaga.com", "custom_domain": true }],
   "vars": {
     // Base URL of the private Cloud Run backend (docs/CLOUD_RUN_BOUNDARY.md).
     // Empty here ⇒ heavy endpoints return 503 BACKEND_NOT_CONFIGURED.

@@ -1,6 +1,6 @@
-import { run } from '@securepdf/core'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
+import { loadCore } from './core'
 import { loadPdfDocument } from './pdf'
 
 export interface LoadedFile {
@@ -28,6 +28,7 @@ function isPdf(bytes: Uint8Array): boolean {
 }
 
 async function imageToPdf(bytes: Uint8Array, file: File): Promise<Uint8Array> {
+  const { run } = await loadCore()
   const result = await run(
     {
       version: '1',
@@ -39,5 +40,7 @@ async function imageToPdf(bytes: Uint8Array, file: File): Promise<Uint8Array> {
   if (!result.ok) {
     throw new Error(result.errors?.[0]?.message ?? `Could not import ${file.name}`)
   }
-  return result.outputs[0].bytes
+  const [output] = result.outputs
+  if (!output) throw new Error(`Could not import ${file.name}`)
+  return output.bytes
 }

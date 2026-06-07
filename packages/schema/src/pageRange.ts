@@ -38,8 +38,8 @@ function parseToken(part: string, expr: string): Token {
 
   if (part.includes('-')) {
     const segs = part.split('-').map((s) => s.trim())
-    if (segs.length !== 2) throw rangeError(expr, part)
     const [a, b] = segs
+    if (segs.length !== 2 || a === undefined || b === undefined) throw rangeError(expr, part)
     if (!INT.test(a)) throw rangeError(expr, part)
     const from = Number(a)
     if (from < 1) throw rangeError(expr, part)

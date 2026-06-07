@@ -1,0 +1,62 @@
+import PrintIcon from '@mui/icons-material/Print'
+import ViewColumnIcon from '@mui/icons-material/ViewColumn'
+import { ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material'
+
+import { t } from '../../app/i18n'
+
+interface MoreMenuProps {
+  anchorEl: HTMLElement | null
+  open: boolean
+  pagesEmpty: boolean
+  twoPageView: boolean
+  onClose: () => void
+  onToggleTwoPageView: () => void
+  onPrint: () => void
+}
+
+/** Overflow menu: toggle the two-page view and a print shortcut. */
+export function MoreMenu({
+  anchorEl,
+  open,
+  pagesEmpty,
+  twoPageView,
+  onClose,
+  onToggleTwoPageView,
+  onPrint,
+}: MoreMenuProps) {
+  return (
+    <Menu
+      anchorEl={anchorEl}
+      open={open}
+      onClose={onClose}
+      MenuListProps={{ dense: true, 'aria-label': t('toolbar.moreMenuLabel') }}
+    >
+      <MenuItem
+        disabled={pagesEmpty}
+        onClick={() => {
+          onToggleTwoPageView()
+          onClose()
+        }}
+      >
+        <ListItemIcon>
+          <ViewColumnIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText
+          primary={twoPageView ? t('toolbar.singlePageView') : t('toolbar.twoPageView')}
+        />
+      </MenuItem>
+      <MenuItem
+        disabled={pagesEmpty}
+        onClick={() => {
+          onClose()
+          onPrint()
+        }}
+      >
+        <ListItemIcon>
+          <PrintIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText primary={t('toolbar.print')} />
+      </MenuItem>
+    </Menu>
+  )
+}

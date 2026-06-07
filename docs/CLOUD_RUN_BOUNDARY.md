@@ -108,7 +108,7 @@ CLI/agent use.
 {
   "version": "1",
   "local": {
-    "operations": ["merge","split","extract","delete","rotate","reorder","insertPdf","insertImage","convertToPdf"],
+    "operations": ["merge","split","extract","delete","rotate","flip","reorder","insertPdf","insertImage","convertToPdf"],
     "inputFormats": ["application/pdf","image/jpeg","image/png"]
   },
   "remote": {

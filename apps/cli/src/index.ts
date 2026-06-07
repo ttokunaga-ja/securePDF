@@ -6,12 +6,12 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 
-import { run, type FileInput } from '@securepdf/core'
+import { type FileInput, run } from '@securepdf/core'
 import {
   OPERATION_NAMES,
+  type OperationPlan,
   SCHEMA_VERSION,
   validatePlan,
-  type OperationPlan,
   type ValidationError,
 } from '@securepdf/schema'
 
@@ -64,7 +64,7 @@ export async function main(argv: string[]): Promise<CliResult> {
 
 async function capabilitiesCommand(args: ParsedArgs, json: boolean): Promise<CliResult> {
   if (useEndpoint(args)) {
-    const res = await fetch(`${trimSlash(args.options.endpoint)}/api/v1/capabilities`, {
+    const res = await fetch(`${endpointBase(args)}/api/v1/capabilities`, {
       headers: authHeaders(args),
     })
     const body = await res.json()
@@ -125,7 +125,7 @@ async function validateCommand(args: ParsedArgs, json: boolean): Promise<CliResu
   if (!args.options.plan) throw new CliError('INVALID_PLAN', 'validate needs --plan <file.json>')
   const plan = JSON.parse(readFileSync(args.options.plan, 'utf8'))
   if (useEndpoint(args)) {
-    const res = await fetch(`${trimSlash(args.options.endpoint)}/api/v1/validate-plan`, {
+    const res = await fetch(`${endpointBase(args)}/api/v1/validate-plan`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...authHeaders(args) },
       body: JSON.stringify(plan),
@@ -183,7 +183,7 @@ async function runRemote(
   for (const file of files) {
     form.set(file.id, new Blob([asArrayBuffer(file.bytes)]), file.filename ?? file.id)
   }
-  const res = await fetch(`${trimSlash(args.options.endpoint)}/api/v1/organize`, {
+  const res = await fetch(`${endpointBase(args)}/api/v1/organize`, {
     method: 'POST',
     headers: authHeaders(args),
     body: form,
@@ -200,8 +200,9 @@ async function runRemote(
 }
 
 function writeOutputs(outputs: { filename: string; bytes: Uint8Array }[], out: string): string[] {
-  if (outputs.length === 1) {
-    writeFileSync(out, outputs[0].bytes)
+  const [first] = outputs
+  if (outputs.length === 1 && first) {
+    writeFileSync(out, first.bytes)
     return [out]
   }
   // Multi-output (split): write each next to the requested path's directory.
@@ -233,7 +234,11 @@ function outputPath(args: ParsedArgs): string {
   return args.options.output ?? 'output.pdf'
 }
 
-function trimSlash(url: string): string {
+/** The endpoint base URL with trailing slashes trimmed. Only reached after
+ *  `useEndpoint(args)` has confirmed an endpoint was supplied. */
+function endpointBase(args: ParsedArgs): string {
+  const url = args.options.endpoint
+  if (!url) throw new CliError('INVALID_PLAN', '--endpoint requires a URL')
   return url.replace(/\/+$/, '')
 }
 
