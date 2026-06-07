@@ -1,16 +1,14 @@
 import CheckRoundedIcon from '@mui/icons-material/CheckRounded'
-import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded'
+import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import GoogleIcon from '@mui/icons-material/Google'
-import KeyRoundedIcon from '@mui/icons-material/KeyRounded'
-import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded'
 import {
   Alert,
   Box,
   Button,
   Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Link,
   Stack,
   TextField,
@@ -45,7 +43,7 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
   const [draft, setDraft] = useState({ value: '', dirty: false })
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{
-    severity: 'success' | 'info' | 'warning' | 'error'
+    severity: 'warning' | 'error'
     text: string
   } | null>(null)
 
@@ -55,14 +53,10 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
   const normalized = useMemo(() => normalizeApiKey(input), [input])
   const hasInput = normalized.length > 0
   const inputValid = isValidApiKey(normalized)
-  const savedSameKey = state.apiKey === normalized
-  const descriptionId = !hasInput
-    ? 'securepdf-api-key-missing'
-    : !inputValid
-      ? 'securepdf-api-key-error'
-      : undefined
+  const helperText = !hasInput ? t('apiKey.notSet') : !inputValid ? t('apiKey.invalid') : undefined
+  const helperId = helperText ? 'securepdf-api-key-helper' : undefined
   const apiKeyLabel = inputValid ? (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.6 }}>
       <Box component="span">{t('apiKey.fieldLabel')}</Box>
       <Box
         component="span"
@@ -85,19 +79,20 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
     t('apiKey.fieldLabel')
   )
 
-  const handleSave = () => {
-    if (!saveApiKey(normalized)) {
-      setMessage({ severity: 'error', text: t('apiKey.invalid') })
+  const handleInputChange = (value: string) => {
+    const next = value.replace(/\s+/g, '')
+    const nextNormalized = normalizeApiKey(next)
+
+    setDraft({ value: next, dirty: true })
+    setMessage(null)
+
+    if (nextNormalized === '') {
+      if (state.hasKey) clearApiKey()
       return
     }
-    setDraft({ value: normalized, dirty: false })
-    setMessage({ severity: 'success', text: t('apiKey.saved') })
-  }
-
-  const handleClear = () => {
-    clearApiKey()
-    setDraft({ value: '', dirty: false })
-    setMessage({ severity: 'info', text: t('apiKey.cleared') })
+    if (isValidApiKey(nextNormalized)) {
+      saveApiKey(nextNormalized)
+    }
   }
 
   const handleIssue = async () => {
@@ -110,7 +105,6 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
         return
       }
       setDraft({ value: issued, dirty: false })
-      setMessage({ severity: 'success', text: t('apiKey.issueSuccess') })
     } catch (error) {
       setMessage({
         severity: 'error',
@@ -121,16 +115,6 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
     }
   }
 
-  const handleCopy = async () => {
-    if (!state.apiKey) return
-    try {
-      await navigator.clipboard.writeText(state.apiKey)
-      setMessage({ severity: 'success', text: t('apiKey.copied') })
-    } catch {
-      setMessage({ severity: 'error', text: t('export.failed') })
-    }
-  }
-
   const handleClose = () => {
     if (busy) return
     setMessage(null)
@@ -138,9 +122,26 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
-      <DialogTitle>{t('apiKey.dialogTitle')}</DialogTitle>
-      <DialogContent>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      fullWidth
+      maxWidth="sm"
+      aria-labelledby="securepdf-auth-dialog-title"
+      slotProps={{ paper: { sx: { position: 'relative' } } }}
+    >
+      <DialogTitle id="securepdf-auth-dialog-title" sx={{ pr: 7 }}>
+        {t('apiKey.dialogTitle')}
+      </DialogTitle>
+      <IconButton
+        aria-label={t('apiKey.close')}
+        disabled={busy}
+        onClick={handleClose}
+        sx={{ position: 'absolute', right: 12, top: 12 }}
+      >
+        <CloseRoundedIcon />
+      </IconButton>
+      <DialogContent sx={{ pb: 3 }}>
         <Stack spacing={2.25} sx={{ pt: 0.5 }}>
           <TextField
             id="securepdf-api-key"
@@ -152,94 +153,46 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
             placeholder={t('apiKey.placeholder')}
             fullWidth
             disabled={busy}
-            error={hasInput && !inputValid}
-            onChange={(event) =>
-              setDraft({ value: event.target.value.replace(/\s+/g, ''), dirty: true })
-            }
+            error={!hasInput || !inputValid}
+            helperText={helperText}
+            onChange={(event) => handleInputChange(event.target.value)}
             slotProps={{
               htmlInput: {
                 autoComplete: 'off',
                 autoCapitalize: 'none',
                 spellCheck: false,
-                'aria-describedby': descriptionId,
-                'aria-invalid': hasInput && !inputValid ? 'true' : undefined,
+                'aria-describedby': helperId,
+                'aria-invalid': !hasInput || !inputValid ? 'true' : undefined,
                 'data-1p-ignore': 'true',
                 'data-lpignore': 'true',
               },
+              formHelperText: helperId ? { id: helperId } : undefined,
             }}
             sx={{ '& input': { WebkitTextSecurity: hasInput ? 'disc' : 'none' } }}
           />
 
-          {!hasInput ? (
-            <Alert
-              id="securepdf-api-key-missing"
-              severity="warning"
-              icon={<KeyRoundedIcon />}
-              sx={{ alignItems: 'center' }}
-            >
-              {t('apiKey.notSet')}
-            </Alert>
-          ) : !inputValid ? (
-            <Alert id="securepdf-api-key-error" severity="error">
-              {t('apiKey.invalid')}
-            </Alert>
-          ) : (
-            <Alert severity="success">{t('apiKey.valid')}</Alert>
-          )}
-
           {message && <Alert severity={message.severity}>{message.text}</Alert>}
 
-          <Stack spacing={1}>
-            <Button
-              variant="contained"
-              startIcon={<GoogleIcon />}
-              disabled={busy}
-              onClick={handleIssue}
-              onFocus={prepareAuthPopup}
-              onMouseEnter={prepareAuthPopup}
-              onPointerDown={prepareAuthPopup}
-            >
-              {t('apiKey.issue')}
-            </Button>
-            <Typography variant="body2" color="text.secondary">
-              {t('apiKey.issueHelp')}
-            </Typography>
-            <Alert severity="info" sx={{ py: 0.75 }}>
-              {t('apiKey.issueRotates')}
-            </Alert>
-          </Stack>
+          <Button
+            variant="contained"
+            startIcon={<GoogleIcon />}
+            disabled={busy}
+            onClick={handleIssue}
+            onFocus={prepareAuthPopup}
+            onMouseEnter={prepareAuthPopup}
+            onPointerDown={prepareAuthPopup}
+          >
+            {t('apiKey.issue')}
+          </Button>
 
           <Typography variant="body2" color="text.secondary">
-            {t('apiKey.portfolioHelp')}{' '}
             <Link href={API_KEY_REQUEST_URL} target="_blank" rel="noreferrer" fontWeight={700}>
               {t('apiKey.portfolio')}
-              <OpenInNewRoundedIcon sx={{ ml: 0.4, fontSize: 14, verticalAlign: '-2px' }} />
             </Link>
+            {t('apiKey.portfolioSuffix')}
           </Typography>
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={handleClose} disabled={busy}>
-          {t('apiKey.close')}
-        </Button>
-        <Button onClick={handleClear} disabled={busy || !state.hasKey} color="error">
-          {t('apiKey.delete')}
-        </Button>
-        <Button
-          onClick={handleCopy}
-          disabled={busy || !state.valid}
-          startIcon={<ContentCopyRoundedIcon />}
-        >
-          {t('apiKey.copy')}
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={busy || !inputValid || savedSameKey}
-        >
-          {t('apiKey.save')}
-        </Button>
-      </DialogActions>
     </Dialog>
   )
 }
