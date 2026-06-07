@@ -5,6 +5,7 @@ import { chrome } from '../app/theme'
 import { useDocState } from '../features/document/DocumentContext'
 import { LEFT_PANE_MAX, LEFT_PANE_MIN, MAIN_TOOLBAR_HEIGHT } from '../lib/constants'
 import { ResizableDivider } from './ResizableDivider'
+import { ApiKeyDialog } from './toolbar/ApiKeyDialog'
 import { ExportActions } from './toolbar/ExportActions'
 import { FilenameField } from './toolbar/FilenameField'
 import { MoreMenu } from './toolbar/MoreMenu'
@@ -37,6 +38,7 @@ export function MainToolbar(props: MainToolbarProps) {
   const { pages } = useDocState()
   const pagesEmpty = pages.length === 0
   const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null)
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false)
 
   return (
     <Box
@@ -122,9 +124,11 @@ export function MainToolbar(props: MainToolbarProps) {
         pagesEmpty={pagesEmpty}
         twoPageView={props.twoPageView}
         onClose={() => setMenuAnchorEl(null)}
+        onOpenApiKey={() => setApiKeyDialogOpen(true)}
         onToggleTwoPageView={props.onToggleTwoPageView}
         onPrint={props.onPrint}
       />
+      {apiKeyDialogOpen && <ApiKeyDialog open onClose={() => setApiKeyDialogOpen(false)} />}
     </Box>
   )
 }

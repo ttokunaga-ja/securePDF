@@ -8,6 +8,8 @@ import { AuthApiError, issueApiKey } from './authApi'
 import { type AuthClient, getLoadedAuthClient, loadAuthClient, preloadAuthClient } from './firebase'
 
 const KEY_STORAGE = 'securepdf.apiKey'
+export const API_KEY_REQUEST_URL = 'https://takumi-tokunaga.com/contact/#api-access'
+export const API_KEY_PATTERN = /^tkp_[a-f0-9]{64}$/
 
 function readStoredKey(): string | null {
   try {
@@ -29,6 +31,45 @@ function storeKey(key: string | null): void {
 
 let apiKey: string | null = readStoredKey()
 
+export interface ApiKeyState {
+  apiKey: string | null
+  hasKey: boolean
+  valid: boolean
+}
+
+const listeners = new Set<(state: ApiKeyState) => void>()
+
+export function normalizeApiKey(value: string): string {
+  return value.trim().replace(/\s+/g, '')
+}
+
+export function isValidApiKey(value: string): boolean {
+  return API_KEY_PATTERN.test(value)
+}
+
+function snapshot(): ApiKeyState {
+  return { apiKey, hasKey: Boolean(apiKey), valid: apiKey ? isValidApiKey(apiKey) : false }
+}
+
+function emit(): void {
+  const state = snapshot()
+  for (const listener of listeners) listener(state)
+}
+
+function setApiKey(next: string): void {
+  apiKey = next
+  storeKey(next)
+  emit()
+}
+
+export function subscribeApiKey(cb: (state: ApiKeyState) => void): () => void {
+  listeners.add(cb)
+  cb(snapshot())
+  return () => {
+    listeners.delete(cb)
+  }
+}
+
 export function getApiKey(): string | null {
   return apiKey
 }
@@ -36,6 +77,14 @@ export function getApiKey(): string | null {
 export function clearApiKey(): void {
   apiKey = null
   storeKey(null)
+  emit()
+}
+
+export function saveApiKey(value: string): boolean {
+  const normalized = normalizeApiKey(value)
+  if (!isValidApiKey(normalized)) return false
+  setApiKey(normalized)
+  return true
 }
 
 export function prepareAuthPopup(): void {
@@ -77,36 +126,48 @@ async function runPopupSignIn(client: AuthClient): Promise<void> {
   }
 }
 
-/** Ensure an API key is available, opening the Google sign-in popup if needed.
- *  Returns null when auth is not configured (caller falls back to no-auth path).
- *  Call this synchronously close to a user gesture so the popup is not blocked. */
-export async function ensureApiKey(): Promise<string | null> {
-  if (apiKey) return apiKey
-
+async function authClient(): Promise<AuthClient | null> {
   let client = getLoadedAuthClient()
   if (!client) {
     const pending = loadAuthClient()
     if (!pending) return null
     client = await pending
   }
+  return client
+}
 
-  await runPopupSignIn(client)
-
+async function issueAndStoreApiKey(client: AuthClient): Promise<string> {
   const idToken = await client.getIdToken()
+  let next: string
   try {
-    apiKey = await issueApiKey(idToken)
+    next = await issueApiKey(idToken)
   } catch (error) {
     if (error instanceof AuthApiError && !needsRecentSignIn(error)) throw authFailedError()
     if (!needsRecentSignIn(error)) throw error
     await runPopupSignIn(client)
     try {
-      apiKey = await issueApiKey(await client.getIdToken())
+      next = await issueApiKey(await client.getIdToken())
     } catch (retryError) {
       if (retryError instanceof AuthApiError) throw authFailedError()
       throw retryError
     }
   }
+  setApiKey(next)
+  return next
+}
 
-  storeKey(apiKey)
-  return apiKey
+export async function issueApiKeyViaPopup(): Promise<string | null> {
+  const client = await authClient()
+  if (!client) return null
+  await runPopupSignIn(client)
+  return issueAndStoreApiKey(client)
+}
+
+/** Ensure an API key is available, opening the Google sign-in popup if needed.
+ *  Returns null when auth is not configured (caller falls back to no-auth path).
+ *  Call this synchronously close to a user gesture so the popup is not blocked. */
+export async function ensureApiKey(): Promise<string | null> {
+  if (apiKey && isValidApiKey(apiKey)) return apiKey
+  if (apiKey) clearApiKey()
+  return issueApiKeyViaPopup()
 }

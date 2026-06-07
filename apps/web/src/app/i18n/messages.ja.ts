@@ -28,6 +28,7 @@ export const ja = {
   'toolbar.twoPageView': '2ページ表示',
   'toolbar.pageLabel': 'ページ番号',
   'toolbar.resizePane': 'サムネイル列の幅',
+  'toolbar.apiKey': 'APIキー',
 
   'rail.label': 'ページ一覧',
   'rail.dragBadge': '{count}枚',
@@ -66,4 +67,26 @@ export const ja = {
   'import.officeAuthPopupBlocked':
     'Google サインインのポップアップを開けませんでした。もう一度ファイルを選択してください。',
   'import.officeNoCredits': '本日の変換クレジットを使い切りました。',
+
+  'apiKey.dialogTitle': 'APIキー',
+  'apiKey.fieldLabel': 'APIキー',
+  'apiKey.placeholder': '発行済み API キー',
+  'apiKey.notSet': 'APIキーが未入力です。',
+  'apiKey.saved': 'APIキーを保存しました。',
+  'apiKey.cleared': 'APIキーを削除しました。',
+  'apiKey.invalid':
+    'APIキーの形式が正しくありません。tkp_ から始まる 68 文字のキーを入力してください。',
+  'apiKey.valid': '形式は有効です。Office 変換時にこのキーを使用します。',
+  'apiKey.issue': 'この画面でAPIキーを取得',
+  'apiKey.issueHelp': 'Google サインインの別ウィンドウでAPIキーを発行し、この入力欄へ保存します。',
+  'apiKey.issueSuccess': 'APIキーを発行して保存しました。',
+  'apiKey.issueRotates': '発行すると既存のAPIキーは無効化され、新しいキーに置き換わります。',
+  'apiKey.issueUnavailable': 'この環境ではAPIキー取得を開始できません。',
+  'apiKey.portfolio': 'ポートフォリオのContactページを開く',
+  'apiKey.portfolioHelp': '同じAPIキー取得導線を別タブでも利用できます。',
+  'apiKey.save': '保存',
+  'apiKey.copy': 'コピー',
+  'apiKey.copied': 'APIキーをコピーしました。',
+  'apiKey.delete': '削除',
+  'apiKey.close': '閉じる',
 } as const

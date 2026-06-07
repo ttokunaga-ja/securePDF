@@ -1,3 +1,4 @@
+import KeyRoundedIcon from '@mui/icons-material/KeyRounded'
 import PrintIcon from '@mui/icons-material/Print'
 import ViewColumnIcon from '@mui/icons-material/ViewColumn'
 import { ListItemIcon, ListItemText, Menu, MenuItem } from '@mui/material'
@@ -10,6 +11,7 @@ interface MoreMenuProps {
   pagesEmpty: boolean
   twoPageView: boolean
   onClose: () => void
+  onOpenApiKey: () => void
   onToggleTwoPageView: () => void
   onPrint: () => void
 }
@@ -21,6 +23,7 @@ export function MoreMenu({
   pagesEmpty,
   twoPageView,
   onClose,
+  onOpenApiKey,
   onToggleTwoPageView,
   onPrint,
 }: MoreMenuProps) {
@@ -44,6 +47,17 @@ export function MoreMenu({
         <ListItemText
           primary={twoPageView ? t('toolbar.singlePageView') : t('toolbar.twoPageView')}
         />
+      </MenuItem>
+      <MenuItem
+        onClick={() => {
+          onClose()
+          onOpenApiKey()
+        }}
+      >
+        <ListItemIcon>
+          <KeyRoundedIcon fontSize="small" />
+        </ListItemIcon>
+        <ListItemText primary={t('toolbar.apiKey')} />
       </MenuItem>
       <MenuItem
         disabled={pagesEmpty}
