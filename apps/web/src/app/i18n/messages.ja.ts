@@ -34,6 +34,8 @@ export const ja = {
   'rail.dragBadge': '{count}枚',
 
   'preview.label': 'ページプレビュー',
+  'preview.insertHere': 'ここに追加',
+  'preview.insertPosition': '{position}番目の位置',
 
   'empty.title': 'PDF を開いて編集',
   'empty.body':

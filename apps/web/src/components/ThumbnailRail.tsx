@@ -67,6 +67,23 @@ export function ThumbnailRail({
   useEffect(() => {
     activeKeyRef.current = activeKey
   })
+
+  useEffect(() => {
+    if (!activeKey || drag) return
+    const rail = railRef.current
+    if (!rail) return
+    const activeCard = [...rail.querySelectorAll<HTMLElement>('[data-page-key]')].find(
+      (node) => node.dataset.pageKey === activeKey,
+    )
+    if (!activeCard) return
+
+    const railRect = rail.getBoundingClientRect()
+    const cardRect = activeCard.getBoundingClientRect()
+    if (cardRect.top < railRect.top || cardRect.bottom > railRect.bottom) {
+      activeCard.scrollIntoView({ block: 'nearest' })
+    }
+  }, [activeKey, drag])
+
   const railSigRef = useRef<{ len: number; order: string } | null>(null)
   // Announce structural changes (add / remove / reorder) to screen readers, and
   // after a deletion restore focus into the rail so keyboard users aren't dropped
@@ -224,50 +241,122 @@ export function ThumbnailRail({
         </Card>
       )
     }
-    const primary = pages.find((page) => page.key === drag.id)
-    const primaryFile = primary ? filesById.get(primary.fileId) : undefined
-    if (!primary || !primaryFile) return null
+    const overlayKeys = [drag.id, ...drag.keys.filter((key) => key !== drag.id)].slice(0, 4)
+    const overlayPages = overlayKeys.flatMap((key) => {
+      const page = pages.find((item) => item.key === key)
+      const file = page ? filesById.get(page.fileId) : undefined
+      return page && file ? [{ page, file }] : []
+    })
+    const primary = overlayPages[0]
+    if (!primary) return null
+    if (drag.keys.length === 1) {
+      return (
+        <Card
+          variant="outlined"
+          sx={{
+            position: 'relative',
+            p: 1,
+            width: cardWidth,
+            height: cardHeight,
+            boxShadow: 6,
+            bgcolor: 'background.paper',
+            cursor: 'grabbing',
+          }}
+        >
+          <PageThumbnail
+            pdf={primary.file.pdf}
+            pageIndex={primary.page.pageIndex}
+            rotation={primary.page.rotation}
+            flipped={primary.page.flipped}
+            cardWidth={cardWidth}
+            cardHeight={cardHeight}
+          />
+        </Card>
+      )
+    }
+
+    const stackOffset = Math.round(clamp(cardWidth * 0.045, 8, 18))
+    const visibleCount = overlayPages.length
     return (
-      <Card
-        variant="outlined"
+      <Box
         sx={{
           position: 'relative',
-          p: 1,
-          width: cardWidth,
-          height: cardHeight,
-          boxShadow: 6,
-          bgcolor: 'background.paper',
+          width: cardWidth + stackOffset * (visibleCount - 1),
+          height: cardHeight + stackOffset * (visibleCount - 1),
           cursor: 'grabbing',
+          pointerEvents: 'none',
         }}
       >
-        <PageThumbnail
-          pdf={primaryFile.pdf}
-          pageIndex={primary.pageIndex}
-          rotation={primary.rotation}
-          flipped={primary.flipped}
-          cardWidth={cardWidth}
-          cardHeight={cardHeight}
-        />
-        {drag.keys.length > 1 && (
+        {overlayPages
+          .map(({ page, file }, index) => (
+            <Card
+              key={page.key}
+              variant="outlined"
+              aria-hidden={index > 0 ? 'true' : undefined}
+              sx={{
+                position: 'absolute',
+                left: index * stackOffset,
+                top: index * stackOffset,
+                zIndex: visibleCount - index,
+                p: 1,
+                width: cardWidth,
+                height: cardHeight,
+                boxShadow: index === 0 ? 8 : 4,
+                bgcolor: 'background.paper',
+                opacity: 1 - index * 0.08,
+              }}
+            >
+              <PageThumbnail
+                pdf={file.pdf}
+                pageIndex={page.pageIndex}
+                rotation={page.rotation}
+                flipped={page.flipped}
+                cardWidth={cardWidth}
+                cardHeight={cardHeight}
+              />
+            </Card>
+          ))
+          .reverse()}
+        <Box
+          aria-hidden="true"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            zIndex: visibleCount + 1,
+            px: 1,
+            py: 0.25,
+            borderRadius: 2,
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            fontSize: 13,
+            fontWeight: 600,
+            boxShadow: 2,
+          }}
+        >
+          {t('rail.dragBadge', { count: drag.keys.length })}
+        </Box>
+        {drag.keys.length > visibleCount && (
           <Box
             aria-hidden="true"
             sx={{
               position: 'absolute',
-              top: 8,
-              right: 8,
+              right: 10,
+              bottom: 8,
+              zIndex: visibleCount + 1,
               px: 1,
               py: 0.25,
               borderRadius: 2,
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
+              bgcolor: 'rgba(0,0,0,0.66)',
+              color: 'common.white',
               fontSize: 13,
               fontWeight: 600,
             }}
           >
-            {t('rail.dragBadge', { count: drag.keys.length })}
+            +{drag.keys.length - visibleCount}
           </Box>
         )}
-      </Card>
+      </Box>
     )
   }
 

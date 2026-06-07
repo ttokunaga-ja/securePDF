@@ -156,7 +156,7 @@ export default function App() {
           twoPageView={twoPageView}
           zoom={zoom.zoom}
           busy={task.busy}
-          onOpenFiles={() => openPickerAt()}
+          onOpenFiles={(insertAt) => openPickerAt(insertAt)}
         />
       </Box>
     </InitialDropZone>
