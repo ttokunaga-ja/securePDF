@@ -27,6 +27,7 @@ export interface AuthClient {
   currentUser(): AuthUser | null
   onChange(cb: (user: AuthUser | null) => void): () => void
   signIn(): Promise<AuthUser>
+  reauthenticate(): Promise<AuthUser>
   signOut(): Promise<void>
   getIdToken(): Promise<string>
 }

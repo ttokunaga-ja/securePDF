@@ -4,8 +4,8 @@
 // (returns null), so Office import falls back to the unauthenticated path.
 
 import { t } from '../app/i18n'
-import { issueApiKey } from './authApi'
-import { getLoadedAuthClient, loadAuthClient, preloadAuthClient } from './firebase'
+import { AuthApiError, issueApiKey } from './authApi'
+import { type AuthClient, getLoadedAuthClient, loadAuthClient, preloadAuthClient } from './firebase'
 
 const KEY_STORAGE = 'securepdf.apiKey'
 
@@ -51,6 +51,32 @@ function isFirebasePopupBlocked(error: unknown): boolean {
   )
 }
 
+function needsRecentSignIn(error: unknown): boolean {
+  return (
+    error instanceof AuthApiError &&
+    error.status === 401 &&
+    (error.code === 'RECENT_SIGN_IN_REQUIRED' ||
+      error.code === 'UNAUTHORIZED' ||
+      error.code === 'INVALID_AUTHORIZATION')
+  )
+}
+
+function authFailedError(): Error {
+  return new Error(t('import.officeAuthFailed'))
+}
+
+async function runPopupSignIn(client: AuthClient): Promise<void> {
+  try {
+    if (client.currentUser()) await client.reauthenticate()
+    else await client.signIn()
+  } catch (error) {
+    if (isFirebasePopupBlocked(error)) {
+      throw new Error(t('import.officeAuthPopupBlocked'))
+    }
+    throw error
+  }
+}
+
 /** Ensure an API key is available, opening the Google sign-in popup if needed.
  *  Returns null when auth is not configured (caller falls back to no-auth path).
  *  Call this synchronously close to a user gesture so the popup is not blocked. */
@@ -64,20 +90,23 @@ export async function ensureApiKey(): Promise<string | null> {
     client = await pending
   }
 
-  let current = client.currentUser()
-  if (!current) {
+  await runPopupSignIn(client)
+
+  const idToken = await client.getIdToken()
+  try {
+    apiKey = await issueApiKey(idToken)
+  } catch (error) {
+    if (error instanceof AuthApiError && !needsRecentSignIn(error)) throw authFailedError()
+    if (!needsRecentSignIn(error)) throw error
+    await runPopupSignIn(client)
     try {
-      current = await client.signIn()
-    } catch (error) {
-      if (isFirebasePopupBlocked(error)) {
-        throw new Error(t('import.officeAuthPopupBlocked'))
-      }
-      throw error
+      apiKey = await issueApiKey(await client.getIdToken())
+    } catch (retryError) {
+      if (retryError instanceof AuthApiError) throw authFailedError()
+      throw retryError
     }
   }
 
-  const idToken = await client.getIdToken()
-  apiKey = await issueApiKey(idToken)
   storeKey(apiKey)
   return apiKey
 }
