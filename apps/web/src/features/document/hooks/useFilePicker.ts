@@ -1,5 +1,6 @@
 import { type ChangeEvent, useCallback, useRef } from 'react'
 
+import { prepareAuthPopup } from '../../../lib/session'
 import type { ImportFromList } from './useFileImport'
 
 /** Drives the hidden `<input type=file>`: opens it remembering the insert
@@ -11,6 +12,7 @@ export function useFilePicker(onFiles: ImportFromList) {
 
   const openPickerAt = useCallback((insertAt?: number) => {
     pendingInsertAtRef.current = insertAt
+    prepareAuthPopup()
     inputRef.current?.click()
   }, [])
 

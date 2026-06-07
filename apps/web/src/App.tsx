@@ -1,6 +1,6 @@
 import { Box } from '@mui/material'
 import { OFFICE_EXTENSIONS, OFFICE_INPUT_FORMATS } from '@securepdf/schema'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { srOnly } from './app/a11y'
 import { t } from './app/i18n'
@@ -19,6 +19,7 @@ import { usePreviewZoom } from './hooks/usePreviewZoom'
 import { useResizablePane } from './hooks/useResizablePane'
 import { MAIN_TOOLBAR_HEIGHT } from './lib/constants'
 import { normalizePdfFilename } from './lib/filename'
+import { prepareAuthPopup } from './lib/session'
 
 /** Accepted import types: PDF and JPEG/PNG (handled in-browser) plus Office
  *  formats (docx/xlsx/pptx, converted server-side via the Worker → GAS backend). */
@@ -56,6 +57,18 @@ export default function App() {
     rotateTargets: actions.rotateTargets,
     flipTargets: actions.flipTargets,
   })
+
+  useEffect(() => {
+    const prepare = () => prepareAuthPopup()
+    window.addEventListener('pointerdown', prepare, { capture: true, once: true })
+    window.addEventListener('keydown', prepare, { capture: true, once: true })
+    window.addEventListener('dragenter', prepare, { capture: true, once: true })
+    return () => {
+      window.removeEventListener('pointerdown', prepare, true)
+      window.removeEventListener('keydown', prepare, true)
+      window.removeEventListener('dragenter', prepare, true)
+    }
+  }, [])
 
   const initialDropEnabled = files.length === 0 && pages.length === 0
 

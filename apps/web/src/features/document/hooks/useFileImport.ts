@@ -24,13 +24,13 @@ export function useFileImport(
     (list, insertAt) => {
       const items = list ? Array.from(list) : []
       if (items.length === 0) return
+      const needsOffice = items.some((file) => isOfficeInput(file.name, file.type))
+      // Start sign-in immediately from the import event. Waiting until the async
+      // task body can make Chrome treat Firebase's popup as blocked.
+      const apiKeyReady = needsOffice ? ensureApiKey() : Promise.resolve(null)
+
       void task.run(async () => {
-        // Office formats require backend conversion → ensure a signed-in API key
-        // first. ensureApiKey() opens the Google sign-in popup when needed; it is
-        // a no-op (returns null) when auth is not configured.
-        if (items.some((file) => isOfficeInput(file.name, file.type))) {
-          await ensureApiKey()
-        }
+        await apiKeyReady
         const imported: LoadedFile[] = []
         for (const file of items) imported.push(await importFile(file))
         if (filesEmpty && imported[0]) {

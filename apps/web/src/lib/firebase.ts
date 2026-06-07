@@ -1,6 +1,8 @@
 // Lazy Firebase Auth boundary. The Firebase SDK is only loaded when auth is
-// actually configured AND used — kept out of the main bundle via a dynamic import
-// of ./firebaseImpl (the same lazy pattern as lib/core.ts for the PDF engine).
+// configured and the user starts interacting with file import — kept out of the
+// main bundle via a dynamic import of ./firebaseImpl (the same lazy pattern as
+// lib/core.ts for the PDF engine). Preloading the chunk before Office conversion
+// keeps signInWithPopup() close enough to the later user gesture for Chrome.
 //
 // Auth is "configured" only when all VITE_FIREBASE_* values are present. When not
 // configured, the app behaves as before (no sign-in; Office falls back to the
@@ -52,12 +54,32 @@ export function isAuthConfigured(): boolean {
 }
 
 let clientPromise: Promise<AuthClient> | null = null
+let loadedClient: AuthClient | null = null
+
+export function getLoadedAuthClient(): AuthClient | null {
+  return loadedClient
+}
 
 /** Lazily load the Firebase-backed auth client, or null when auth is unconfigured. */
 export function loadAuthClient(): Promise<AuthClient> | null {
   if (!config) return null
   if (!clientPromise) {
-    clientPromise = import('./firebaseImpl').then((m) => m.createAuthClient(config))
+    clientPromise = import('./firebaseImpl')
+      .then((m) => {
+        loadedClient = m.createAuthClient(config)
+        return loadedClient
+      })
+      .catch((error: unknown) => {
+        clientPromise = null
+        throw error
+      })
   }
   return clientPromise
+}
+
+/** Start loading Firebase Auth without opening a popup. Safe to call repeatedly. */
+export function preloadAuthClient(): void {
+  void loadAuthClient()?.catch(() => {
+    /* Retried by ensureApiKey(); preloading should never surface a UI error. */
+  })
 }
