@@ -6,6 +6,9 @@
 //   - POST /api/v1/validate-plan (light: @securepdf/schema, no PDF parsing)
 //   - POST /api/v1/organize, /api/v1/convert/to-pdf
 //       → STREAM-PROXY to Cloud Run (CLOUD_RUN_URL); 503 when unset.
+//   - POST /api/v1/convert/office
+//       → server-to-server forward to a Google Apps Script Web App
+//         (GAS_CONVERT_URL, ?token=GAS_TOKEN) for Office→PDF; 503 when unset.
 //
 // The Worker never imports the heavy @securepdf/core or parses file bytes — that
 // would risk the 10 ms CPU / 128 MB / 3 MB-bundle free limits. See
@@ -21,6 +24,10 @@ export interface Env {
   CLOUD_RUN_URL?: string
   /** Optional bearer token attached to Cloud Run requests (keeps it private). */
   CLOUD_RUN_TOKEN?: string
+  /** Google Apps Script Web App URL for Office→PDF (server-to-server, no CORS). */
+  GAS_CONVERT_URL?: string
+  /** Shared secret appended as `?token=` to the GAS request. */
+  GAS_TOKEN?: string
 }
 
 const PROXY_ROUTES = new Set(['/api/v1/organize', '/api/v1/convert/to-pdf'])
@@ -39,6 +46,9 @@ export default {
     if (pathname === '/api/v1/validate-plan') {
       return handleValidate(request)
     }
+    if (pathname === '/api/v1/convert/office') {
+      return proxyToGas(request, env)
+    }
     if (PROXY_ROUTES.has(pathname)) {
       return proxyToCloudRun(request, env, pathname)
     }
@@ -53,7 +63,13 @@ export default {
 } satisfies ExportedHandler<Env>
 
 function capabilities(env: Env) {
-  const remoteAvailable = Boolean(env.CLOUD_RUN_URL)
+  const cloudRun = Boolean(env.CLOUD_RUN_URL)
+  const office = Boolean(env.GAS_CONVERT_URL)
+  const remoteAvailable = cloudRun || office
+  const adds = [
+    ...(office || cloudRun ? ['office-to-pdf'] : []),
+    ...(cloudRun ? ['large-files', 'compress', 'repair'] : []),
+  ]
   return {
     version: SCHEMA_VERSION,
     local: {
@@ -63,11 +79,49 @@ function capabilities(env: Env) {
     remote: remoteAvailable
       ? {
           available: true,
-          via: 'cloud-run',
-          adds: ['office-to-pdf', 'large-files', 'compress', 'repair'],
+          via: cloudRun ? 'cloud-run' : 'apps-script',
+          adds,
           maxInputBytes: 104_857_600,
         }
       : { available: false },
+  }
+}
+
+/** Forward an Office→PDF JSON request to the Google Apps Script Web App. GAS is
+ *  called server-to-server (no CORS) with the shared secret as `?token=`. The
+ *  body is small (a base64 Office file) so we buffer it — a streamed body can't be
+ *  replayed across GAS's 302→GET response redirect. */
+async function proxyToGas(request: Request, env: Env): Promise<Response> {
+  if (request.method !== 'POST') {
+    return json(errorBody('NOT_FOUND', 'Use POST for Office conversion.'), 404)
+  }
+  if (!env.GAS_CONVERT_URL) {
+    return json(
+      errorBody('BACKEND_NOT_CONFIGURED', 'No Office conversion backend is configured.'),
+      503,
+    )
+  }
+  const target = new URL(env.GAS_CONVERT_URL)
+  if (env.GAS_TOKEN) target.searchParams.set('token', env.GAS_TOKEN)
+  let body: string
+  try {
+    body = await request.text()
+  } catch {
+    return json(errorBody('INVALID_PLAN', 'Request body could not be read.'), 400)
+  }
+  try {
+    const upstream = await fetch(target.toString(), {
+      method: 'POST',
+      headers: { 'content-type': 'text/plain;charset=utf-8' },
+      body,
+      redirect: 'follow',
+    })
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+    })
+  } catch {
+    return json(errorBody('BACKEND_UNAVAILABLE', 'Office conversion backend is unreachable.'), 502)
   }
 }
 

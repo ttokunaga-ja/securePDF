@@ -20,5 +20,9 @@
     // Empty here ⇒ heavy endpoints return 503 BACKEND_NOT_CONFIGURED.
     // Set per-environment via `wrangler secret put CLOUD_RUN_URL` or env config.
     "CLOUD_RUN_URL": "",
+    // Google Apps Script Web App URL for Office→PDF (docs/office-conversion.md).
+    // Empty ⇒ /api/v1/convert/office returns 503. Set the real URL per-environment
+    // (e.g. `wrangler secret put GAS_CONVERT_URL`); GAS_TOKEN is always a secret.
+    "GAS_CONVERT_URL": "",
   },
 }

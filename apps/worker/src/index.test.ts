@@ -171,3 +171,65 @@ describe('worker proxy', () => {
     )
   })
 })
+
+describe('office convert', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns 503 when no GAS backend is configured', async () => {
+    const res = await call(
+      new Request('https://x/api/v1/convert/office', { method: 'POST', body: '{}' }),
+    )
+    expect(res.status).toBe(503)
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe(
+      'BACKEND_NOT_CONFIGURED',
+    )
+  })
+
+  it('advertises office-to-pdf (via apps-script) in capabilities when GAS is set', async () => {
+    const res = await call(
+      new Request('https://x/api/v1/capabilities'),
+      makeEnv({ GAS_CONVERT_URL: 'https://script.google.com/macros/s/abc/exec' }),
+    )
+    const body = (await res.json()) as {
+      remote: { available: boolean; via?: string; adds?: string[] }
+    }
+    expect(body.remote.available).toBe(true)
+    expect(body.remote.via).toBe('apps-script')
+    expect(body.remote.adds).toContain('office-to-pdf')
+  })
+
+  it('forwards to the GAS web app with the shared-secret token and returns its JSON', async () => {
+    const calls: { url: string }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push({ url })
+        return new Response(JSON.stringify({ ok: true, pdfBase64: 'UERG' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }),
+    )
+    const res = await call(
+      new Request('https://x/api/v1/convert/office', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mimeType: 'application/msword',
+          filename: 'a.doc',
+          fileBase64: 'AAA',
+        }),
+      }),
+      makeEnv({
+        GAS_CONVERT_URL: 'https://script.google.com/macros/s/abc/exec',
+        GAS_TOKEN: 'secret',
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(((await res.json()) as { ok: boolean; pdfBase64: string }).pdfBase64).toBe('UERG')
+    expect(calls).toHaveLength(1)
+    const u = new URL(at(calls, 0).url)
+    expect(u.origin + u.pathname).toBe('https://script.google.com/macros/s/abc/exec')
+    expect(u.searchParams.get('token')).toBe('secret')
+  })
+})

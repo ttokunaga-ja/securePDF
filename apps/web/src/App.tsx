@@ -1,4 +1,5 @@
 import { Box } from '@mui/material'
+import { OFFICE_EXTENSIONS, OFFICE_INPUT_FORMATS } from '@securepdf/schema'
 import { useState } from 'react'
 
 import { srOnly } from './app/a11y'
@@ -18,6 +19,16 @@ import { usePreviewZoom } from './hooks/usePreviewZoom'
 import { useResizablePane } from './hooks/useResizablePane'
 import { MAIN_TOOLBAR_HEIGHT } from './lib/constants'
 import { normalizePdfFilename } from './lib/filename'
+
+/** Accepted import types: PDF and JPEG/PNG (handled in-browser) plus Office
+ *  formats (docx/xlsx/pptx, converted server-side via the Worker → GAS backend). */
+const FILE_ACCEPT = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  ...OFFICE_INPUT_FORMATS,
+  ...OFFICE_EXTENSIONS,
+].join(',')
 
 /** Thin layout shell: wires UI-local state (filename, two-page view, pane width,
  *  zoom) and the import/export hooks to the toolbar, thumbnail rail and preview.
@@ -97,7 +108,7 @@ export default function App() {
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf,image/jpeg,image/png"
+        accept={FILE_ACCEPT}
         multiple
         hidden
         aria-label={t('app.fileInput')}

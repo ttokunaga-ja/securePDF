@@ -56,4 +56,8 @@ export const ja = {
   'insert.label': '{position}番目の位置に挿入',
 
   'export.failed': 'PDFの生成に失敗しました',
+
+  'import.officeUnavailable':
+    'Office ファイルの変換は現在利用できません（変換サーバが未設定です）。',
+  'import.officeFailed': '「{name}」を PDF に変換できませんでした。',
 } as const
