@@ -60,4 +60,10 @@ export const ja = {
   'import.officeUnavailable':
     'Office ファイルの変換は現在利用できません（変換サーバが未設定です）。',
   'import.officeFailed': '「{name}」を PDF に変換できませんでした。',
+  'import.officeAuthRequired': 'Office 変換にはサインインが必要です。',
+  'import.officeNoCredits': '本日の変換クレジットを使い切りました。',
+
+  'auth.signIn': 'Google でサインイン',
+  'auth.signOut': 'サインアウト',
+  'auth.credits': '残り {remaining}/{limit}',
 } as const

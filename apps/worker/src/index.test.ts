@@ -232,4 +232,34 @@ describe('office convert', () => {
     expect(u.origin + u.pathname).toBe('https://script.google.com/macros/s/abc/exec')
     expect(u.searchParams.get('token')).toBe('secret')
   })
+
+  it('proxies office to Cloud Run (forwarding X-API-Key) when CLOUD_RUN_URL is set', async () => {
+    const calls: { url: string; headers: Headers }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init: { headers: Headers }) => {
+        calls.push({ url, headers: init.headers })
+        return new Response(JSON.stringify({ ok: true, pdfBase64: 'UERG' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      }),
+    )
+    const res = await call(
+      new Request('https://x/api/v1/convert/office', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': 'tkp_test' },
+        body: '{"mimeType":"application/msword","filename":"a.doc","fileBase64":"AAA"}',
+      }),
+      // Cloud Run is preferred even when GAS is also configured.
+      makeEnv({
+        CLOUD_RUN_URL: 'https://office.run.example.com',
+        GAS_CONVERT_URL: 'https://gas/exec',
+      }),
+    )
+    expect(res.status).toBe(200)
+    expect(calls).toHaveLength(1)
+    expect(at(calls, 0).url).toBe('https://office.run.example.com/convert/office')
+    expect(at(calls, 0).headers.get('x-api-key')).toBe('tkp_test')
+  })
 })

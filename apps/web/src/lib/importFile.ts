@@ -4,6 +4,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { t } from '../app/i18n'
 import { loadCore } from './core'
 import { loadPdfDocument } from './pdf'
+import { clearApiKey, getApiKey } from './session'
 
 export interface LoadedFile {
   id: string
@@ -53,16 +54,21 @@ async function imageToPdf(bytes: Uint8Array, file: File): Promise<Uint8Array> {
   return output.bytes
 }
 
-/** Convert an Office document to PDF via the Worker, which forwards to the Google
- *  Apps Script backend (server-to-server, no CORS). The browser only base64-encodes
- *  the input and decodes the returned PDF — no Office bytes are parsed locally. */
+/** Convert an Office document to PDF via the Worker, which forwards to the Cloud
+ *  Run office service (auth + daily credits) — or the GAS fallback during rollout.
+ *  The browser only base64-encodes the input and decodes the returned PDF, and
+ *  attaches the user's API key (X-API-Key) when signed in. */
 async function officeToPdf(file: File): Promise<Uint8Array> {
   const fileBase64 = await fileToBase64(file)
+  const headers: Record<string, string> = { 'content-type': 'application/json' }
+  const apiKey = getApiKey()
+  if (apiKey) headers['x-api-key'] = apiKey
+
   let res: Response
   try {
     res = await fetch('/api/v1/convert/office', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers,
       body: JSON.stringify({
         mimeType: officeMimeFor(file.name, file.type),
         filename: file.name,
@@ -72,6 +78,11 @@ async function officeToPdf(file: File): Promise<Uint8Array> {
   } catch {
     throw new Error(t('import.officeUnavailable'))
   }
+  if (res.status === 401) {
+    clearApiKey()
+    throw new Error(t('import.officeAuthRequired'))
+  }
+  if (res.status === 402 || res.status === 429) throw new Error(t('import.officeNoCredits'))
   if (res.status === 503) throw new Error(t('import.officeUnavailable'))
 
   let data: { ok?: boolean; pdfBase64?: string; message?: string } = {}

@@ -7,8 +7,10 @@
 //   - POST /api/v1/organize, /api/v1/convert/to-pdf
 //       → STREAM-PROXY to Cloud Run (CLOUD_RUN_URL); 503 when unset.
 //   - POST /api/v1/convert/office
-//       → server-to-server forward to a Google Apps Script Web App
-//         (GAS_CONVERT_URL, ?token=GAS_TOKEN) for Office→PDF; 503 when unset.
+//       → if CLOUD_RUN_URL is set: proxy to the authenticated Cloud Run office
+//         service (X-API-Key forwarded; key + daily credits enforced there via
+//         trialAuth/authAPI). Else fall back to the GAS Web App (GAS_CONVERT_URL,
+//         ?token=GAS_TOKEN), unauthenticated. 503 when neither is set.
 //
 // The Worker never imports the heavy @securepdf/core or parses file bytes — that
 // would risk the 10 ms CPU / 128 MB / 3 MB-bundle free limits. See
@@ -47,6 +49,9 @@ export default {
       return handleValidate(request)
     }
     if (pathname === '/api/v1/convert/office') {
+      // Prefer the authenticated Cloud Run office service (forwards X-API-Key);
+      // fall back to the unauthenticated GAS-direct path during rollout.
+      if (env.CLOUD_RUN_URL) return proxyToCloudRun(request, env, pathname)
       return proxyToGas(request, env)
     }
     if (PROXY_ROUTES.has(pathname)) {

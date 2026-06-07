@@ -1,7 +1,9 @@
+import { isOfficeInput } from '@securepdf/schema'
 import { useCallback } from 'react'
 
 import { normalizePdfFilename } from '../../../lib/filename'
 import { importFile, type LoadedFile } from '../../../lib/importFile'
+import { ensureApiKey } from '../../../lib/session'
 import { useDocActions, useDocState } from '../DocumentContext'
 import type { AsyncTask } from './useAsyncTask'
 
@@ -23,6 +25,12 @@ export function useFileImport(
       const items = list ? Array.from(list) : []
       if (items.length === 0) return
       void task.run(async () => {
+        // Office formats require backend conversion → ensure a signed-in API key
+        // first. ensureApiKey() opens the Google sign-in popup when needed; it is
+        // a no-op (returns null) when auth is not configured.
+        if (items.some((file) => isOfficeInput(file.name, file.type))) {
+          await ensureApiKey()
+        }
         const imported: LoadedFile[] = []
         for (const file of items) imported.push(await importFile(file))
         if (filesEmpty && imported[0]) {
