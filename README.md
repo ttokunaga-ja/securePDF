@@ -93,6 +93,13 @@ wrangler secret put CLOUD_RUN_TOKEN          # optional bearer token (keeps it p
 - [Decisions](docs/DECISIONS.md)
 - [Architecture](docs/architecture.md) · [API](docs/api.md) · [Security](docs/security.md)
 
+Public in-app documentation pages are Markdown-managed under
+`apps/web/content/ja/`:
+
+- `overview.md`: service overview
+- `security.md`: security policy
+- `api.md`: API documentation
+
 ## License
 
 TBD.

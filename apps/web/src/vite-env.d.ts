@@ -1,5 +1,10 @@
 /// <reference types="vite/client" />
 
+declare module '*.md?raw' {
+  const content: string
+  export default content
+}
+
 interface ImportMetaEnv {
   /** authAPI base URL (e.g. https://auth.api.takumi-tokunaga.com). */
   readonly VITE_AUTHAPI_URL?: string

@@ -1,6 +1,6 @@
 import { Box } from '@mui/material'
 import { OFFICE_EXTENSIONS, OFFICE_INPUT_FORMATS } from '@securepdf/schema'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 
 import { srOnly } from './app/a11y'
 import { t } from './app/i18n'
@@ -19,7 +19,12 @@ import { usePreviewZoom } from './hooks/usePreviewZoom'
 import { useResizablePane } from './hooks/useResizablePane'
 import { MAIN_TOOLBAR_HEIGHT } from './lib/constants'
 import { normalizePdfFilename } from './lib/filename'
+import { infoPageForPath } from './lib/infoRoutes'
 import { prepareAuthPopup } from './lib/session'
+
+const InfoPage = lazy(() =>
+  import('./components/InfoPage').then((module) => ({ default: module.InfoPage })),
+)
 
 /** Accepted import types: PDF and JPEG/PNG (handled in-browser) plus Office
  *  formats (docx/xlsx/pptx, converted server-side via the Worker → GAS backend). */
@@ -31,10 +36,24 @@ const FILE_ACCEPT = [
   ...OFFICE_EXTENSIONS,
 ].join(',')
 
-/** Thin layout shell: wires UI-local state (filename, two-page view, pane width,
+/** Route switch: the editor stays the default route; public docs are loaded only
+ *  when a /docs/... path is opened. */
+export default function App() {
+  const infoPage = infoPageForPath(typeof window === 'undefined' ? '/' : window.location.pathname)
+
+  return infoPage ? (
+    <Suspense fallback={<Box sx={{ minHeight: '100vh', bgcolor: '#f5f7f8' }} />}>
+      <InfoPage page={infoPage} />
+    </Suspense>
+  ) : (
+    <EditorApp />
+  )
+}
+
+/** Thin editor shell: wires UI-local state (filename, two-page view, pane width,
  *  zoom) and the import/export hooks to the toolbar, thumbnail rail and preview.
  *  All document-editing state lives in the DocumentProvider (see main.tsx). */
-export default function App() {
+function EditorApp() {
   const [outputFilename, setOutputFilename] = useState('securepdf.pdf')
   const [twoPageView, setTwoPageView] = useState(false)
 

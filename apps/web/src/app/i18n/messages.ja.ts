@@ -29,6 +29,9 @@ export const ja = {
   'toolbar.pageLabel': 'ページ番号',
   'toolbar.resizePane': 'サムネイル列の幅',
   'toolbar.apiKey': '認証',
+  'toolbar.serviceOverview': 'サービス概要',
+  'toolbar.securityPolicy': 'セキュリティポリシー',
+  'toolbar.apiDocs': 'APIドキュメント',
 
   'rail.label': 'ページ一覧',
   'rail.dragBadge': '{count}枚',
