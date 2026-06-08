@@ -3,7 +3,7 @@ import { useCallback } from 'react'
 import { t } from '../../../app/i18n'
 import { buildPlan } from '../../../lib/buildPlan'
 import { loadCore } from '../../../lib/core'
-import { downloadFile, printFile } from '../../../lib/export'
+import { createPrintSession, downloadFile } from '../../../lib/export'
 import { normalizePdfFilename } from '../../../lib/filename'
 import { useDocState } from '../DocumentContext'
 import type { AsyncTask } from './useAsyncTask'
@@ -58,9 +58,15 @@ export function usePdfExport(
 
   const printPdf = useCallback(() => {
     if (pages.length === 0) return
+    const printSession = createPrintSession()
     void task.run(async () => {
-      const output = await createOutputPdf()
-      printFile(output.bytes)
+      try {
+        const output = await createOutputPdf()
+        printSession.print(output.bytes)
+      } catch (error) {
+        printSession.cancel()
+        throw error
+      }
     })
   }, [pages.length, task, createOutputPdf])
 
