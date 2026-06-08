@@ -78,15 +78,12 @@ function EditorApp() {
   })
 
   useEffect(() => {
-    const prepare = () => prepareAuthPopup()
-    window.addEventListener('pointerdown', prepare, { capture: true, once: true })
-    window.addEventListener('keydown', prepare, { capture: true, once: true })
-    window.addEventListener('dragenter', prepare, { capture: true, once: true })
-    return () => {
-      window.removeEventListener('pointerdown', prepare, true)
-      window.removeEventListener('keydown', prepare, true)
-      window.removeEventListener('dragenter', prepare, true)
-    }
+    // Start loading the Firebase chunk immediately on mount so it is ready
+    // before the user's first drag-and-drop or file-picker selection.
+    // Without this, the first Office import attempt may hit an unloaded client
+    // and await a network fetch, losing the browser's transient user activation
+    // before signInWithPopup is reached.
+    prepareAuthPopup()
   }, [])
 
   const initialDropEnabled = files.length === 0 && pages.length === 0

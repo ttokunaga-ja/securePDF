@@ -108,16 +108,6 @@ async function runPopupSignIn(client: AuthClient): Promise<void> {
   }
 }
 
-async function authClient(): Promise<AuthClient | null> {
-  let client = getLoadedAuthClient()
-  if (!client) {
-    const pending = loadAuthClient()
-    if (!pending) return null
-    client = await pending
-  }
-  return client
-}
-
 async function issueAndStoreApiKey(client: AuthClient): Promise<string> {
   const idToken = await client.getIdToken()
   let next: string
@@ -139,8 +129,15 @@ async function issueAndStoreApiKey(client: AuthClient): Promise<string> {
 }
 
 export async function issueApiKeyViaPopup(): Promise<string | null> {
-  const client = await authClient()
-  if (!client) return null
+  // Use the synchronous getter when the client is already loaded so that
+  // signInWithPopup is reached without any preceding await. This preserves the
+  // browser's transient user activation when the SDK was preloaded on mount.
+  let client = getLoadedAuthClient()
+  if (!client) {
+    const pending = loadAuthClient()
+    if (!pending) return null
+    client = await pending
+  }
   await runPopupSignIn(client)
   return issueAndStoreApiKey(client)
 }
