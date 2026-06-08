@@ -1,80 +1,41 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPrintSession } from './export'
+import { printFile } from './export'
 
 const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46])
 
 function stubObjectUrls() {
-  const createObjectURL = vi.fn(() => 'about:blank#securepdf-test')
+  const createObjectURL = vi.fn(() => 'blob:securepdf-test')
   const revokeObjectURL = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL })
   return { createObjectURL, revokeObjectURL }
 }
 
-function createFakeWindow() {
-  const fake = {
-    document: document.implementation.createHTMLDocument(''),
-    closed: false,
-    close: vi.fn(),
-    focus: vi.fn(),
-    print: vi.fn(),
-    addEventListener: vi.fn(),
-    setTimeout: vi.fn(),
-    opener: window,
-  }
-  fake.close.mockImplementation(() => {
-    fake.closed = true
-  })
-  return fake as unknown as Window & typeof fake
-}
-
-describe('createPrintSession', () => {
+describe('printFile', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     document.body.replaceChildren()
   })
 
-  it('opens a print window synchronously and can cancel it', () => {
-    const target = createFakeWindow()
-    const open = vi.spyOn(window, 'open').mockReturnValue(target)
-
-    const session = createPrintSession()
-
-    expect(open).toHaveBeenCalledWith('', '_blank')
-    expect(target.opener).toBeNull()
-    expect(target.document.body.textContent).toContain('Preparing PDF for print')
-
-    session.cancel()
-
-    expect(target.close).toHaveBeenCalled()
-  })
-
-  it('prints through the reserved window when PDF bytes are ready', () => {
-    const target = createFakeWindow()
-    vi.spyOn(window, 'open').mockReturnValue(target)
+  it('uses the historical hidden iframe print path', () => {
     const { createObjectURL } = stubObjectUrls()
+    const appendChild = vi
+      .spyOn(document.body, 'appendChild')
+      .mockImplementation((node: Node) => node)
 
-    const session = createPrintSession()
-    session.print(pdfBytes)
+    printFile(pdfBytes)
 
-    const frame = target.document.querySelector('iframe')
-    expect(createObjectURL).toHaveBeenCalled()
-    expect(frame?.src).toBe('about:blank#securepdf-test')
-    expect(frame?.style.width).toBe('100vw')
-    expect(frame?.style.height).toBe('100vh')
-  })
-
-  it('falls back to an in-page print frame when popups are blocked', () => {
-    vi.spyOn(window, 'open').mockReturnValue(null)
-    stubObjectUrls()
-
-    const session = createPrintSession()
-    session.print(pdfBytes)
-
-    const frame = document.body.querySelector('iframe')
-    expect(frame?.src).toBe('about:blank#securepdf-test')
-    expect(frame?.style.width).toBe('1px')
-    expect(frame?.style.opacity).toBe('0')
+    const frame = appendChild.mock.calls[0]?.[0] as HTMLIFrameElement | undefined
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(frame).toBeInstanceOf(HTMLIFrameElement)
+    expect(frame?.src).toBe('blob:securepdf-test')
+    expect(frame?.style.position).toBe('fixed')
+    expect(frame?.style.right).toBe('0px')
+    expect(frame?.style.bottom).toBe('0px')
+    expect(frame?.style.width).toBe('0px')
+    expect(frame?.style.height).toBe('0px')
+    expect(frame?.style.border).toBe('0px')
+    expect(frame?.onload).toEqual(expect.any(Function))
   })
 })
