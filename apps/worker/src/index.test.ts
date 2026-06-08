@@ -200,7 +200,7 @@ describe('worker proxy', () => {
     expect(at(calls, 0).headers.get('authorization')).toBe('Bearer secret')
     expect(at(calls, 0).headers.get('host')).toBeNull()
     expect(at(calls, 0).headers.get('x-api-key')).toBe('tkp_test')
-    expect(at(calls, 0).headers.get('x-request-id')).toBe('req-1')
+    expect(at(calls, 0).headers.get('x-request-id')).toBeNull()
     expect(at(calls, 0).headers.get('x-forwarded-for')).toBeNull()
   })
 
@@ -316,7 +316,10 @@ describe('office convert', () => {
     const res = await call(
       new Request('https://x/api/v1/convert/office', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-api-key': 'tkp_test' },
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': `tkp_${'a'.repeat(64)}`,
+        },
         body: JSON.stringify({
           mimeType: 'application/msword',
           filename: 'a.doc',

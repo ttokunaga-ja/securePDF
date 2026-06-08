@@ -61,7 +61,7 @@ export default {
       if (!env.GAS_CONVERT_URL) return proxyToGas(request, env)
       // GAS fallback: require X-API-Key to prevent anonymous callers from
       // exhausting the deploying user's Google Drive daily conversion quota.
-      if (!request.headers.get('x-api-key')) {
+      if (!isValidApiKey(request.headers.get('x-api-key') ?? '')) {
         return json(errorBody('UNAUTHORIZED', 'X-API-Key header required.'), 401)
       }
       return proxyToGas(request, env)
@@ -81,6 +81,10 @@ export default {
     return env.ASSETS.fetch(request)
   },
 } satisfies ExportedHandler<Env>
+
+function isValidApiKey(key: string): boolean {
+  return /^tkp_[a-f0-9]{64}$/.test(key)
+}
 
 function capabilities(env: Env) {
   const cloudRun = Boolean(env.CLOUD_RUN_URL)
@@ -206,7 +210,7 @@ async function proxyToCloudRun(request: Request, env: Env, pathname: string): Pr
 function cloudRunHeaders(request: Request, env: Env): Headers {
   const incoming = request.headers
   const headers = new Headers()
-  for (const name of ['content-type', 'accept', 'x-api-key', 'x-request-id']) {
+  for (const name of ['content-type', 'accept', 'x-api-key']) {
     const value = incoming.get(name)
     if (value) headers.set(name, value)
   }

@@ -12,7 +12,7 @@ Browser (apps/web)                Cloudflare Worker            Google Apps Scrip
   read Office file
   base64 + POST JSON  ─────▶  POST /api/v1/convert/office
   {mimeType,filename,           forward body to
-   fileBase64}                  GAS_CONVERT_URL?token=GAS_TOKEN ─────▶  doPost
+   fileBase64}                  GAS_CONVERT_URL (token in body)  ─────▶  doPost
                                 (server-to-server, no CORS)            Drive: Office→Google→PDF
   decode pdfBase64  ◀─────  stream JSON back  ◀──────────────────  {ok,filename,pdfBase64}
   render as a PDF
@@ -21,7 +21,7 @@ Browser (apps/web)                Cloudflare Worker            Google Apps Scrip
 - The browser never parses Office bytes; it only base64-encodes the input and
   decodes the returned PDF (`apps/web/src/lib/importFile.ts`).
 - The Worker is a **thin server-to-server proxy** (`/api/v1/convert/office`): it
-  appends `?token=` and forwards the small JSON body. This sidesteps GAS's CORS
+  injects the token as a field in the JSON POST body and forwards it. This sidesteps GAS's CORS
   limitations (a browser can't reliably read a GAS response cross-origin).
 - GAS converts via Drive and returns base64 PDF (`tools/gas/Code.gs`).
 
@@ -54,9 +54,9 @@ Optional (CLI deploy of the script): use [`clasp`](https://github.com/google/cla
 
 ## Security & privacy
 
-- **Auth:** the Web App is public ("Anyone"), so a **shared secret** (`?token=`,
-  checked against `SHARED_SECRET`) gates it. The browser never sees the token —
-  the Worker injects it.
+- **Auth:** the Web App is public ("Anyone"), so a **shared secret** (injected as
+  a `token` field in the JSON POST body, checked against `SHARED_SECRET`) gates it.
+  The browser never sees the token — the Worker injects it.
 - **Privacy:** Office conversion is inherently non-local. With GAS, the file
   briefly becomes a temp file in the **deploying user's Google Drive**, deleted
   immediately after export. Surface this to users; PDFs/images still stay 100%
