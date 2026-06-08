@@ -1,29 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createPrintSession } from './export'
+import { downloadFile, printFile } from './export'
 
 const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46])
-
-function createFakeWindow() {
-  const fake = {
-    document: document.implementation.createHTMLDocument(''),
-    location: { href: 'about:blank' },
-    closed: false,
-    close: vi.fn(),
-    focus: vi.fn(),
-    print: vi.fn(),
-    opener: window,
-  }
-  fake.close.mockImplementation(() => {
-    fake.closed = true
-  })
-  return fake as unknown as Window & typeof fake
-}
 
 function stubObjectUrls() {
   const createObjectURL = vi.fn((blob: Blob) => {
     void blob
-    return 'blob:securepdf-native-pdf'
+    return 'blob:securepdf-test'
   })
   const revokeObjectURL = vi.fn()
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL })
@@ -31,59 +15,92 @@ function stubObjectUrls() {
   return { createObjectURL, revokeObjectURL }
 }
 
-describe('createPrintSession', () => {
+describe('browser export helpers', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     document.body.replaceChildren()
   })
 
-  it('opens a browser tab synchronously and can cancel it', () => {
-    const target = createFakeWindow()
-    const open = vi.spyOn(window, 'open').mockReturnValue(target)
-
-    const session = createPrintSession()
-
-    expect(open).toHaveBeenCalledWith('', '_blank')
-    expect(target.opener).toBeNull()
-    expect(target.document.body.textContent).toContain('PDFを開いています')
-
-    session.cancel()
-
-    expect(target.close).toHaveBeenCalled()
-  })
-
-  it('hands the generated PDF to the native PDF viewer without custom rendering', async () => {
-    const target = createFakeWindow()
-    vi.spyOn(window, 'open').mockReturnValue(target)
+  it('downloads a PDF blob without opening a print tab', () => {
     const { createObjectURL, revokeObjectURL } = stubObjectUrls()
-    const timers: Array<() => void> = []
-    vi.spyOn(window, 'setTimeout').mockImplementation(((handler: TimerHandler) => {
-      if (typeof handler === 'function') timers.push(handler as () => void)
-      return 0
-    }) as unknown as typeof window.setTimeout)
+    const open = vi.spyOn(window, 'open')
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
 
-    const session = createPrintSession()
-    await session.print(pdfBytes)
+    downloadFile('securepdf.pdf', pdfBytes)
 
     const blob = createObjectURL.mock.calls[0]?.[0]
     expect(blob).toBeInstanceOf(Blob)
     expect(blob?.type).toBe('application/pdf')
-    expect(target.location.href).toBe('blob:securepdf-native-pdf')
-    expect(target.document.querySelector('iframe')).toBeNull()
-    expect(target.document.querySelector('[data-print-pages]')).toBeNull()
-
-    timers[0]?.()
-    expect(target.print).toHaveBeenCalled()
-
-    timers[1]?.()
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:securepdf-native-pdf')
+    expect(click).toHaveBeenCalledOnce()
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:securepdf-test')
+    expect(open).not.toHaveBeenCalled()
   })
 
-  it('surfaces a clear error when the print window is blocked', async () => {
-    vi.spyOn(window, 'open').mockReturnValue(null)
+  it('prints the generated PDF through a hidden iframe without opening a tab', async () => {
+    const { createObjectURL, revokeObjectURL } = stubObjectUrls()
+    const open = vi.spyOn(window, 'open')
+    vi.spyOn(window, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+    ) => {
+      void handler
+      return timeout ?? 0
+    }) as typeof window.setTimeout)
+    const appendChild = vi
+      .spyOn(document.body, 'appendChild')
+      .mockImplementation((node: Node) => node)
 
-    const session = createPrintSession()
+    const printPromise = printFile(pdfBytes)
+    const frame = appendChild.mock.calls[0]?.[0] as HTMLIFrameElement | undefined
+    const focus = vi.fn()
+    const print = vi.fn()
+    const addEventListener = vi.fn()
+    Object.defineProperty(frame, 'contentWindow', {
+      configurable: true,
+      value: { addEventListener, focus, print },
+    })
+    frame?.onload?.call(frame, new Event('load'))
 
-    await expect(session.print(pdfBytes)).rejects.toThrow('印刷用ウィンドウを開けませんでした')
+    await printPromise
+
+    expect(createObjectURL).toHaveBeenCalledOnce()
+    expect(frame).toBeInstanceOf(HTMLIFrameElement)
+    expect(frame?.src).toBe('blob:securepdf-test')
+    expect(frame?.style.position).toBe('fixed')
+    expect(frame?.style.width).toBe('0px')
+    expect(frame?.style.height).toBe('0px')
+    expect(addEventListener).toHaveBeenCalledWith('afterprint', expect.any(Function), {
+      once: true,
+    })
+    expect(focus).toHaveBeenCalledOnce()
+    expect(print).toHaveBeenCalledOnce()
+    expect(open).not.toHaveBeenCalled()
+
+    window.dispatchEvent(new Event('afterprint'))
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:securepdf-test')
+  })
+
+  it('surfaces a clear error when the hidden print frame is unavailable', async () => {
+    const { revokeObjectURL } = stubObjectUrls()
+    const open = vi.spyOn(window, 'open')
+    vi.spyOn(window, 'setTimeout').mockImplementation(((
+      handler: TimerHandler,
+      timeout?: number,
+    ) => {
+      void handler
+      return timeout ?? 0
+    }) as typeof window.setTimeout)
+    const appendChild = vi
+      .spyOn(document.body, 'appendChild')
+      .mockImplementation((node: Node) => node)
+
+    const printPromise = printFile(pdfBytes)
+    const frame = appendChild.mock.calls[0]?.[0] as HTMLIFrameElement | undefined
+    Object.defineProperty(frame, 'contentWindow', { configurable: true, value: null })
+    frame?.onload?.call(frame, new Event('load'))
+
+    await expect(printPromise).rejects.toThrow('ブラウザの印刷ダイアログを開けませんでした')
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:securepdf-test')
+    expect(open).not.toHaveBeenCalled()
   })
 })
