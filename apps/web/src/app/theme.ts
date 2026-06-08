@@ -47,6 +47,75 @@ export const theme = createTheme({
     // app-wide (covers MUI, dnd-kit reflow, and our own transitions). WCAG 2.3.3.
     MuiCssBaseline: {
       styleOverrides: {
+        '@media print': {
+          '@page': {
+            margin: '10mm',
+          },
+          'html, body, #root': {
+            width: 'auto !important',
+            height: 'auto !important',
+            minHeight: '0 !important',
+            overflow: 'visible !important',
+            background: '#ffffff !important',
+          },
+          body: {
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact',
+          },
+          'header, aside, [role="complementary"], [role="separator"], [data-preview-insert-slot]': {
+            display: 'none !important',
+          },
+          '[data-print-workspace], [data-print-preview-root], [data-print-scrollport], [data-print-preview-pages], [data-print-page-row]':
+            {
+              display: 'block !important',
+              width: 'auto !important',
+              height: 'auto !important',
+              minHeight: '0 !important',
+              maxWidth: 'none !important',
+              overflow: 'visible !important',
+              background: '#ffffff !important',
+              padding: '0 !important',
+              margin: '0 !important',
+              gap: '0 !important',
+            },
+          '[data-preview-page-key]': {
+            display: 'block !important',
+            width: '100% !important',
+            maxWidth: 'none !important',
+            minWidth: '0 !important',
+            padding: '0 !important',
+            margin: '0 !important',
+            breakAfter: 'page',
+            pageBreakAfter: 'always',
+          },
+          '[data-preview-page-key]:last-of-type': {
+            breakAfter: 'auto',
+            pageBreakAfter: 'auto',
+          },
+          '[data-print-page-shell]': {
+            display: 'block !important',
+            width: '100% !important',
+            minHeight: '0 !important',
+            padding: '0 !important',
+            margin: '0 !important',
+          },
+          '[data-print-page-frame]': {
+            width: '100% !important',
+            height: 'auto !important',
+            maxWidth: 'none !important',
+            boxShadow: 'none !important',
+          },
+          '[data-print-page-canvas]': {
+            display: 'block !important',
+            width: '100% !important',
+            height: 'auto !important',
+            maxWidth: '100% !important',
+            background: '#ffffff !important',
+          },
+          '[data-print-page-frame] .MuiCircularProgress-root': {
+            display: 'none !important',
+          },
+        },
         '@media (prefers-reduced-motion: reduce)': {
           '*, *::before, *::after': {
             animationDuration: '0.01ms !important',

@@ -124,6 +124,7 @@ export function PreviewPage({
   return (
     <Box
       ref={frameRef}
+      data-print-page-shell
       sx={{
         minHeight: fillViewport ? '100%' : undefined,
         display: 'flex',
@@ -133,6 +134,7 @@ export function PreviewPage({
       }}
     >
       <Box
+        data-print-page-frame
         sx={{
           position: 'relative',
           width: renderedSize.width,
@@ -156,6 +158,7 @@ export function PreviewPage({
         )}
         <canvas
           ref={canvasRef}
+          data-print-page-canvas
           style={{
             display: 'block',
             width: '100%',

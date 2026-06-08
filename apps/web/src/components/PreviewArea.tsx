@@ -98,7 +98,6 @@ export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAre
         <PreviewPage
           compact={compact}
           fillViewport={false}
-          lazyRoot={scrollRef}
           pdf={file.pdf}
           pageIndex={page.pageIndex}
           rotation={page.rotation}
@@ -196,6 +195,7 @@ export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAre
     if (!twoPageView) {
       return (
         <Stack
+          data-print-preview-pages
           spacing={2}
           alignItems="center"
           sx={{ width: '100%', minHeight: '100%', px: { xs: 1, sm: 2 }, py: 2 }}
@@ -208,9 +208,14 @@ export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAre
     const rows: PreviewItem[][] = []
     for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2))
     return (
-      <Stack spacing={2.5} sx={{ width: '100%', minHeight: '100%', px: { xs: 1.5, sm: 3 }, py: 3 }}>
+      <Stack
+        data-print-preview-pages
+        spacing={2.5}
+        sx={{ width: '100%', minHeight: '100%', px: { xs: 1.5, sm: 3 }, py: 3 }}
+      >
         {rows.map((row) => (
           <Box
+            data-print-page-row
             key={row
               .map((item) => (item.kind === 'slot' ? `slot-${item.index}` : item.page.key))
               .join('|')}
@@ -232,6 +237,7 @@ export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAre
   return (
     <Box
       component="main"
+      data-print-preview-root
       aria-label={t('preview.label')}
       sx={{
         flex: 1,
@@ -243,6 +249,7 @@ export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAre
     >
       <Box
         id="main-preview"
+        data-print-scrollport
         ref={scrollRef}
         tabIndex={0}
         onScroll={scheduleScrollSync}

@@ -20,6 +20,7 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { usePreviewZoom } from './hooks/usePreviewZoom'
 import { useResizablePane } from './hooks/useResizablePane'
 import { MAIN_TOOLBAR_HEIGHT } from './lib/constants'
+import { printCurrentPage } from './lib/export'
 import { normalizePdfFilename } from './lib/filename'
 import { infoPageForPath } from './lib/infoRoutes'
 import { prepareAuthPopup } from './lib/session'
@@ -90,7 +91,7 @@ function EditorApp() {
     [importFiles, setTaskError],
   )
   const { inputRef, openPickerAt, onInputChange } = useFilePicker(importFilesWithAuthGate)
-  const { exportPdf, printPdf } = usePdfExport(task, outputFilename, setOutputFilename)
+  const { exportPdf } = usePdfExport(task, outputFilename, setOutputFilename)
 
   const handleOpenApiKey = useCallback(() => {
     setPendingAuthImport(null)
@@ -177,7 +178,7 @@ function EditorApp() {
         onToggleTwoPageView={() => setTwoPageView((prev) => !prev)}
         onOpenApiKey={handleOpenApiKey}
         onExport={exportPdf}
-        onPrint={printPdf}
+        onPrint={printCurrentPage}
         onResizeStart={pane.onResizeStart}
       />
 
@@ -201,6 +202,7 @@ function EditorApp() {
       />
 
       <Box
+        data-print-workspace
         sx={{
           height: `calc(100vh - ${MAIN_TOOLBAR_HEIGHT}px)`,
           minHeight: 0,

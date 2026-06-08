@@ -3,14 +3,14 @@ import { useCallback } from 'react'
 import { t } from '../../../app/i18n'
 import { buildPlan } from '../../../lib/buildPlan'
 import { loadCore } from '../../../lib/core'
-import { downloadFile, printFile } from '../../../lib/export'
+import { downloadFile } from '../../../lib/export'
 import { normalizePdfFilename } from '../../../lib/filename'
 import { useDocState } from '../DocumentContext'
 import type { AsyncTask } from './useAsyncTask'
 
 /** Build the operation plan from the arranged pages and run it through the core
- *  engine to produce output PDF bytes, then download or print them. The engine is
- *  loaded lazily here, so viewing a document never pulls in @cantoo/pdf-lib. */
+ *  engine to produce output PDF bytes, then download them. The engine is loaded
+ *  lazily here, so viewing a document never pulls in @cantoo/pdf-lib. */
 export function usePdfExport(
   task: AsyncTask,
   outputFilename: string,
@@ -56,13 +56,5 @@ export function usePdfExport(
     })
   }, [pages.length, task, createOutputPdf, outputFilename, setOutputFilename])
 
-  const printPdf = useCallback(() => {
-    if (pages.length === 0) return
-    void task.run(async () => {
-      const output = await createOutputPdf()
-      await printFile(output.bytes)
-    })
-  }, [pages.length, task, createOutputPdf])
-
-  return { exportPdf, printPdf }
+  return { exportPdf }
 }
