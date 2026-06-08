@@ -2,6 +2,7 @@ import { isOfficeInput, officeMimeFor } from '@securepdf/schema'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
 import { t } from '../app/i18n'
+import { base64ToBytes } from './base64'
 import { loadCore } from './core'
 import { loadPdfDocument } from './pdf'
 import { clearApiKey, getApiKey } from './session'
@@ -94,8 +95,11 @@ async function officeToPdf(file: File): Promise<Uint8Array> {
   if (!res.ok || !data.ok || !data.pdfBase64) {
     throw new Error(data.message ?? t('import.officeFailed', { name: file.name }))
   }
-  const buffer = await (await fetch(`data:application/pdf;base64,${data.pdfBase64}`)).arrayBuffer()
-  return new Uint8Array(buffer)
+  try {
+    return base64ToBytes(data.pdfBase64)
+  } catch {
+    throw new Error(t('import.officeFailed', { name: file.name }))
+  }
 }
 
 /** Read a File as base64 (no data-URL prefix) without blowing the call stack on
