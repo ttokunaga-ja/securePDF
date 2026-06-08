@@ -54,6 +54,10 @@ export function getApiKey(): string | null {
   return apiKey
 }
 
+export function hasValidApiKey(): boolean {
+  return apiKey ? isValidApiKey(apiKey) : false
+}
+
 export function clearApiKey(): void {
   apiKey = null
   emit()

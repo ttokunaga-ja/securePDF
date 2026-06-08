@@ -1,6 +1,6 @@
 import { Box } from '@mui/material'
 import { OFFICE_EXTENSIONS, OFFICE_INPUT_FORMATS } from '@securepdf/schema'
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 
 import { srOnly } from './app/a11y'
 import { t } from './app/i18n'
@@ -9,11 +9,13 @@ import { MainToolbar } from './components/MainToolbar'
 import { PreviewArea } from './components/PreviewArea'
 import { ResizableDivider } from './components/ResizableDivider'
 import { ThumbnailRail } from './components/ThumbnailRail'
+import { ApiKeyDialog } from './components/toolbar/ApiKeyDialog'
 import { useDocActions, useDocState } from './features/document/DocumentContext'
 import { useAsyncTask } from './features/document/hooks/useAsyncTask'
-import { useFileImport } from './features/document/hooks/useFileImport'
+import { type ImportFromList, useFileImport } from './features/document/hooks/useFileImport'
 import { useFilePicker } from './features/document/hooks/useFilePicker'
 import { usePdfExport } from './features/document/hooks/usePdfExport'
+import { shouldRequestOfficeAuth } from './features/document/importAuth'
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts'
 import { usePreviewZoom } from './hooks/usePreviewZoom'
 import { useResizablePane } from './hooks/useResizablePane'
@@ -36,6 +38,11 @@ const FILE_ACCEPT = [
   ...OFFICE_EXTENSIONS,
 ].join(',')
 
+interface PendingAuthImport {
+  files: File[]
+  insertAt?: number
+}
+
 /** Route switch: the editor stays the default route; public docs are loaded only
  *  when a /docs/... path is opened. */
 export default function App() {
@@ -56,15 +63,51 @@ export default function App() {
 function EditorApp() {
   const [outputFilename, setOutputFilename] = useState('securepdf.pdf')
   const [twoPageView, setTwoPageView] = useState(false)
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false)
+  const [pendingAuthImport, setPendingAuthImport] = useState<PendingAuthImport | null>(null)
 
   const { files, pages } = useDocState()
   const actions = useDocActions()
   const pane = useResizablePane()
   const zoom = usePreviewZoom()
   const task = useAsyncTask()
+  const { setError: setTaskError } = task
   const importFiles = useFileImport(task, setOutputFilename)
-  const { inputRef, openPickerAt, onInputChange } = useFilePicker(importFiles)
+  const importFilesWithAuthGate = useCallback<ImportFromList>(
+    (list, insertAt) => {
+      const items = list ? Array.from(list) : []
+      if (items.length === 0) return
+
+      if (shouldRequestOfficeAuth(items)) {
+        setPendingAuthImport({ files: items, insertAt })
+        setApiKeyDialogOpen(true)
+        setTaskError(null)
+        return
+      }
+
+      importFiles(items, insertAt)
+    },
+    [importFiles, setTaskError],
+  )
+  const { inputRef, openPickerAt, onInputChange } = useFilePicker(importFilesWithAuthGate)
   const { exportPdf, printPdf } = usePdfExport(task, outputFilename, setOutputFilename)
+
+  const handleOpenApiKey = useCallback(() => {
+    setPendingAuthImport(null)
+    setApiKeyDialogOpen(true)
+  }, [])
+
+  const handleCloseApiKey = useCallback(() => {
+    setApiKeyDialogOpen(false)
+    setPendingAuthImport(null)
+  }, [])
+
+  const handleApiKeyReady = useCallback(() => {
+    if (!pendingAuthImport) return
+    setPendingAuthImport(null)
+    setApiKeyDialogOpen(false)
+    importFiles(pendingAuthImport.files, pendingAuthImport.insertAt)
+  }, [importFiles, pendingAuthImport])
 
   useKeyboardShortcuts({
     selectAll: actions.selectAll,
@@ -89,7 +132,10 @@ function EditorApp() {
   const initialDropEnabled = files.length === 0 && pages.length === 0
 
   return (
-    <InitialDropZone enabled={initialDropEnabled} onDropFiles={(list) => importFiles(list, 0)}>
+    <InitialDropZone
+      enabled={initialDropEnabled}
+      onDropFiles={(list) => importFilesWithAuthGate(list, 0)}
+    >
       <Box
         component="a"
         href="#main-preview"
@@ -129,10 +175,20 @@ function EditorApp() {
         onApplyZoomPercent={zoom.applyZoomPercent}
         twoPageView={twoPageView}
         onToggleTwoPageView={() => setTwoPageView((prev) => !prev)}
+        onOpenApiKey={handleOpenApiKey}
         onExport={exportPdf}
         onPrint={printPdf}
         onResizeStart={pane.onResizeStart}
       />
+
+      {apiKeyDialogOpen && (
+        <ApiKeyDialog
+          open
+          notice={pendingAuthImport ? t('import.officeAuthRequired') : undefined}
+          onClose={handleCloseApiKey}
+          onApiKeyReady={handleApiKeyReady}
+        />
+      )}
 
       <input
         ref={inputRef}
@@ -157,7 +213,7 @@ function EditorApp() {
           busy={task.busy}
           error={task.error}
           onDismissError={() => task.setError(null)}
-          onImportFiles={importFiles}
+          onImportFiles={importFilesWithAuthGate}
           onPickAt={openPickerAt}
         />
         <ResizableDivider

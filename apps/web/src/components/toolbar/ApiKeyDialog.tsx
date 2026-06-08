@@ -32,13 +32,15 @@ import {
 interface ApiKeyDialogProps {
   open: boolean
   onClose: () => void
+  onApiKeyReady?: (apiKey: string) => void
+  notice?: string
 }
 
 function initialState(): ApiKeyState {
   return { apiKey: null, hasKey: false, valid: false }
 }
 
-export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
+export function ApiKeyDialog({ open, onClose, onApiKeyReady, notice }: ApiKeyDialogProps) {
   const [state, setState] = useState<ApiKeyState>(initialState)
   const [draft, setDraft] = useState({ value: '', dirty: false })
   const [busy, setBusy] = useState(false)
@@ -92,6 +94,7 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
     }
     if (isValidApiKey(nextNormalized)) {
       saveApiKey(nextNormalized)
+      onApiKeyReady?.(nextNormalized)
     }
   }
 
@@ -105,6 +108,7 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
         return
       }
       setDraft({ value: issued, dirty: false })
+      onApiKeyReady?.(issued)
     } catch (error) {
       setMessage({
         severity: 'error',
@@ -143,6 +147,8 @@ export function ApiKeyDialog({ open, onClose }: ApiKeyDialogProps) {
       </IconButton>
       <DialogContent sx={{ pb: 3 }}>
         <Stack spacing={2.25} sx={{ pt: 0.5 }}>
+          {notice && <Alert severity="info">{notice}</Alert>}
+
           <TextField
             id="securepdf-api-key"
             label={apiKeyLabel}

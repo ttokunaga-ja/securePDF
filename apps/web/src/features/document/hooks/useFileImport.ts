@@ -1,9 +1,7 @@
-import { isOfficeInput } from '@securepdf/schema'
 import { useCallback } from 'react'
 
 import { normalizePdfFilename } from '../../../lib/filename'
 import { importFile, type LoadedFile } from '../../../lib/importFile'
-import { ensureApiKey } from '../../../lib/session'
 import { useDocActions, useDocState } from '../DocumentContext'
 import type { AsyncTask } from './useAsyncTask'
 
@@ -24,13 +22,8 @@ export function useFileImport(
     (list, insertAt) => {
       const items = list ? Array.from(list) : []
       if (items.length === 0) return
-      const needsOffice = items.some((file) => isOfficeInput(file.name, file.type))
-      // Start sign-in immediately from the import event. Waiting until the async
-      // task body can make Chrome treat Firebase's popup as blocked.
-      const apiKeyReady = needsOffice ? ensureApiKey() : Promise.resolve(null)
 
       void task.run(async () => {
-        await apiKeyReady
         const imported: LoadedFile[] = []
         for (const file of items) imported.push(await importFile(file))
         if (filesEmpty && imported[0]) {
