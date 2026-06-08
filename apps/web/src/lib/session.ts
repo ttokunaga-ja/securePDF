@@ -100,10 +100,14 @@ function authFailedError(): Error {
   return new Error(t('import.officeAuthFailed'))
 }
 
+function rotationTooSoonError(): Error {
+  return new Error(t('import.officeKeyRotationTooSoon'))
+}
+
 async function runPopupSignIn(client: AuthClient): Promise<void> {
   try {
-    if (client.currentUser()) await client.reauthenticate()
-    else await client.signIn()
+    if (client.currentUser()) await client.signOut()
+    await client.signIn()
   } catch (error) {
     if (isFirebasePopupOpenFailure(error)) {
       throw new Error(t('import.officeAuthPopupBlocked'))
@@ -118,12 +122,18 @@ async function issueAndStoreApiKey(client: AuthClient): Promise<string> {
   try {
     next = await issueApiKey(idToken)
   } catch (error) {
+    if (error instanceof AuthApiError && error.code === 'API_KEY_ROTATION_TOO_SOON') {
+      throw rotationTooSoonError()
+    }
     if (error instanceof AuthApiError && !needsRecentSignIn(error)) throw authFailedError()
     if (!needsRecentSignIn(error)) throw error
     await runPopupSignIn(client)
     try {
       next = await issueApiKey(await client.getIdToken())
     } catch (retryError) {
+      if (retryError instanceof AuthApiError && retryError.code === 'API_KEY_ROTATION_TOO_SOON') {
+        throw rotationTooSoonError()
+      }
       if (retryError instanceof AuthApiError) throw authFailedError()
       throw retryError
     }

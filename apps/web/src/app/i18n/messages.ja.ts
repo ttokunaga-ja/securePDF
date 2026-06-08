@@ -71,6 +71,8 @@ export const ja = {
     'Google サインインを確認できませんでした。もう一度ファイルを選択してください。',
   'import.officeAuthPopupBlocked':
     'Google サインインのポップアップを開けませんでした。もう一度ファイルを選択してください。',
+  'import.officeKeyRotationTooSoon':
+    'APIキーを直前に発行しています。10秒ほど待ってから、もう一度Googleで認証してください。',
   'import.officeNoCredits': '本日の変換クレジットを使い切りました。',
 
   'apiKey.dialogTitle': '認証',
