@@ -340,7 +340,7 @@ describe('office convert', () => {
     expect(JSON.parse(at(calls, 0).body)).toMatchObject({ token: 'secret', filename: 'a.doc' })
   })
 
-  it('proxies office to Cloud Run (forwarding X-API-Key) when CLOUD_RUN_URL is set', async () => {
+  it('falls back to Cloud Run for office conversion when GAS is not configured', async () => {
     const calls: { url: string; headers: Headers }[] = []
     vi.stubGlobal(
       'fetch',
@@ -358,10 +358,8 @@ describe('office convert', () => {
         headers: { 'content-type': 'application/json', 'x-api-key': 'tkp_test' },
         body: '{"mimeType":"application/msword","filename":"a.doc","fileBase64":"AAA"}',
       }),
-      // Cloud Run is preferred even when GAS is also configured.
       makeEnv({
         CLOUD_RUN_URL: 'https://office.run.example.com',
-        GAS_CONVERT_URL: 'https://gas/exec',
       }),
     )
     expect(res.status).toBe(200)

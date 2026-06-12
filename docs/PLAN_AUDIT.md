@@ -135,7 +135,7 @@ binding constraint.
 1. The server-side API requires **Workers Paid**, and likely a `limits.cpu_ms`
    bump toward the 5-min ceiling for the largest allowed jobs. State this as a
    cost decision, not a footnote.
-2. Make the **GUI local-first** the headline: browser-side processing has no
+2. Make the **GUI client-first** the headline: browser-side processing has no
    128 MB isolate ceiling and no per-request CPU cap, and keeps files on-device
    (a privacy win the plan already hints at). The API is the convenience path
    for **automation/agents/CLI**, governed by strict limits.

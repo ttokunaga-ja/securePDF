@@ -78,7 +78,7 @@ Input → PDF only (no reverse conversion, no OCR in v1).
 ```text
 securePDF/
   apps/
-    web/                 # Vite + React 19 + MUI 6 SPA (local-first)
+    web/                 # Vite + React 19 + MUI 6 SPA (client-first)
     cli/                 # npm CLI: local engine + --endpoint (→ Worker)
     worker/              # Cloudflare Worker: static host + light API + proxy
       src/index.ts
@@ -134,7 +134,7 @@ Versioned JSON schema; the single contract across GUI/CLI/Worker/Cloud Run.
 
 ## 5. Browser GUI Plan
 
-First screen is the working area, **local-first** (files stay on-device unless
+First screen is the working area, **client-first** (files stay on-device unless
 downloaded). Views: import area; PDF.js thumbnail grid; selected-page toolbar;
 operation queue; output settings; export; optional CLI/API command preview.
 Controls: drag-and-drop; click/shift-click/range selection; rotate; delete;
@@ -250,7 +250,7 @@ Cloud Run's budget (32 GiB / 8 vCPU / 60 min) lives in
 
 ## 9. Security and Privacy
 
-- **Browser local-first** is the privacy default: files never leave the device for
+- **Client-first processing** is the privacy default: files never leave the device for
   on-device operations. Advertise which operations are local.
 - Worker: **no file storage, no payload logging** (only `requestId` + coarse
   metadata); streaming proxy never parses or buffers file bytes; sanitize output

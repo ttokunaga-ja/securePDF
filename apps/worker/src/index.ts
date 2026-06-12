@@ -7,11 +7,10 @@
 //   - POST /api/v1/organize, /api/v1/convert/to-pdf
 //       → STREAM-PROXY to Cloud Run (CLOUD_RUN_URL); 503 when unset.
 //   - POST /api/v1/convert/office
-//       → if CLOUD_RUN_URL is set: proxy to the authenticated Cloud Run office
-//         service (X-API-Key forwarded; key + daily credits enforced there via
-//         trialAuth/authAPI). Else fall back to the GAS Web App (GAS_CONVERT_URL),
+//       → if GAS_CONVERT_URL is set: proxy to the dedicated-account GAS Web App,
 //         requiring X-API-Key header. GAS_TOKEN is injected into the POST body
-//         (not the URL) to keep it out of logs. 503 when neither is set.
+//         (not the URL) to keep it out of logs. Else fall back to the authenticated
+//         Cloud Run office service. 503 when neither is set.
 //   - GET/POST /__/auth/* and /__/firebase/*
 //       → reverse-proxy Firebase Auth helper pages so Firebase Auth can use this
 //         first-party domain when browsers block third-party storage/cookies.
@@ -56,15 +55,15 @@ export default {
       return handleValidate(request)
     }
     if (pathname === '/api/v1/convert/office') {
-      // Prefer the authenticated Cloud Run office service (forwards X-API-Key).
-      if (env.CLOUD_RUN_URL) return proxyToCloudRun(request, env, pathname)
-      if (!env.GAS_CONVERT_URL) return proxyToGas(request, env)
-      // GAS fallback: require X-API-Key to prevent anonymous callers from
-      // exhausting the deploying user's Google Drive daily conversion quota.
-      if (!isValidApiKey(request.headers.get('x-api-key') ?? '')) {
-        return json(errorBody('UNAUTHORIZED', 'X-API-Key header required.'), 401)
+      if (env.GAS_CONVERT_URL) {
+        // GAS Drive API conversion: require X-API-Key to prevent anonymous callers from
+        // exhausting the dedicated conversion account's Drive conversion quota.
+        if (!isValidApiKey(request.headers.get('x-api-key') ?? '')) {
+          return json(errorBody('UNAUTHORIZED', 'X-API-Key header required.'), 401)
+        }
+        return proxyToGas(request, env)
       }
-      return proxyToGas(request, env)
+      return proxyToCloudRun(request, env, pathname)
     }
     if (PROXY_ROUTES.has(pathname)) {
       return proxyToCloudRun(request, env, pathname)
@@ -90,6 +89,7 @@ function capabilities(env: Env) {
   const cloudRun = Boolean(env.CLOUD_RUN_URL)
   const office = Boolean(env.GAS_CONVERT_URL)
   const remoteAvailable = cloudRun || office
+  const via = cloudRun && office ? 'cloud-run+apps-script' : cloudRun ? 'cloud-run' : 'apps-script'
   const adds = [
     ...(office || cloudRun ? ['office-to-pdf'] : []),
     ...(cloudRun ? ['large-files', 'compress', 'repair'] : []),
@@ -103,7 +103,7 @@ function capabilities(env: Env) {
     remote: remoteAvailable
       ? {
           available: true,
-          via: cloudRun ? 'cloud-run' : 'apps-script',
+          via,
           adds,
           maxInputBytes: 104_857_600,
         }

@@ -1,4 +1,4 @@
-// securepdf CLI — local-first PDF organization for humans and agents.
+// securepdf CLI — local-only PDF organization for humans and agents.
 //
 // Runs operations locally via @securepdf/core (no network), or against a
 // configured securePDF endpoint with --endpoint. Every command supports --json.

@@ -22,7 +22,7 @@ construction** — there is no server HTML to reconcile.
 
 ## Why all-client is the right call (not a smell)
 
-securePDF is a **local-first, privacy-preserving** tool: user PDFs are opened,
+securePDF is a **client-first, privacy-preserving** tool: user PDFs are opened,
 rendered, edited and exported **entirely in the browser** and never uploaded. The
 core interactions depend on browser-only APIs:
 

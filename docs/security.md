@@ -7,12 +7,12 @@ plus the controls checklist to satisfy before public exposure.
 
 - **Inputs are untrusted.** PDFs and images come from anyone; parsing them is the
   main attack surface.
-- **GUI is local-first.** Browser-executed operations never leave the device —
+- **GUI is client-first.** Browser-executed operations never leave the device —
   the strongest privacy position, and the default.
 - **The Worker is a parse-free proxy** (Cloudflare free tier): it serves light
   JSON and *streams* heavy requests to Cloud Run, never parsing file bytes.
   Server-side file parsing — and the parsing-related controls below — run on
-  **Cloud Run**; the browser parses for local-first operations.
+  **Cloud Run**; the browser parses for client-side operations.
 
 ## Threats → controls
 

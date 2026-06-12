@@ -5,7 +5,7 @@ engine via three entry points — **browser GUI**, **CLI**, and **HTTP API** —
 deployed as a single **Cloudflare Worker with Static Assets**.
 
 **This repo runs entirely on the Cloudflare free tier:** static SPA delivery,
-**in-browser** PDF processing (local-first), and a *light* Worker that serves
+**client-first** PDF processing, and a *light* Worker that serves
 `capabilities`/`openapi.json`/`validate-plan` and **proxies** heavy operations to
 a separate **Cloud Run** service. Anything that can't run for free on Cloudflare
 (large PDFs, Office→PDF, native qpdf/Ghostscript/LibreOffice) lives in the Cloud
@@ -28,7 +28,7 @@ No separate implementations, no separate backend.
 
 ```text
 apps/
-  web/        Vite + React 19 + MUI 6 SPA (local-first)
+  web/        Vite + React 19 + MUI 6 SPA (client-first)
   cli/        npm CLI package
   worker/     Cloudflare Worker — API + static-asset host
 packages/

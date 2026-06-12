@@ -13,7 +13,7 @@ guessing.
 │                                                                          │
 │  Static Assets ───────▶  SPA (apps/web)  ──▶ in-browser PDF engine       │
 │                                              (@securepdf/core + codecs    │
-│                                               + pdfjs-dist), local-first  │
+│                                               + pdfjs-dist), client-first │
 │                                                                          │
 │  Worker (apps/worker, free: 10 ms CPU, 100 MB body, 100k req/day)        │
 │    GET  /api/v1/capabilities   ── light, served here                     │

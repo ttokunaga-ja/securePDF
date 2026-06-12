@@ -5,8 +5,8 @@
  * conversion engine. The securePDF Cloudflare Worker calls this server-to-server
  * (no CORS). The shared secret is passed as `token` inside the JSON POST body
  * (not as a URL query parameter) to keep it out of server logs.
- * Files transit the deploying user's Google Drive briefly (a temp file, deleted
- * right after) — see docs/office-conversion.md for the privacy note.
+ * Files transit the dedicated conversion account's Google Drive briefly (a temp
+ * file, deleted right after) — see docs/office-conversion.md for the privacy note.
  *
  * Request  (POST body, JSON): { mimeType, filename, fileBase64, token }
  * Response (JSON): { ok:true, filename, pdfBase64 } | { ok:false, code, message }

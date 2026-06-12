@@ -27,14 +27,20 @@ Browser (apps/web)                Cloudflare Worker            Google Apps Scrip
 
 ## Deploy the GAS Web App
 
-1. Create a project at <https://script.google.com> → paste `tools/gas/Code.gs`;
+Use a **dedicated conversion Google account** for this project. Do not deploy it
+from a personal main account: Drive conversion creates a temporary file in the
+executing account's Drive, even though the script deletes it immediately.
+
+1. Sign in to the dedicated conversion account and create a project at
+   <https://script.google.com> → paste `tools/gas/Code.gs`;
    set the manifest to `tools/gas/appsscript.json` (or add the Drive advanced
    service + Web App settings manually).
 2. **Services (+) → Drive API** (advanced service, identifier `Drive`, v3).
 3. **Project Settings → Script properties** → add `SHARED_SECRET` = a long random
    string.
 4. **Deploy → New deployment → Web app**: _Execute as_ **Me**, _Who has access_
-   **Anyone**. Authorize the Drive scope when prompted. Copy the `/exec` URL.
+   **Anyone**. Here, _Me_ must be the dedicated conversion account. Authorize the
+   Drive scope when prompted. Copy the `/exec` URL.
 
 ### Wire it into Cloudflare
 
@@ -48,6 +54,9 @@ wrangler secret put GAS_TOKEN         # paste the SHARED_SECRET
 declares no matching `var` on purpose, since a same-named var would conflict with
 the secret. When unset, `/api/v1/convert/office` returns
 `503 BACKEND_NOT_CONFIGURED` and `capabilities` reports `office-to-pdf` absent.)
+When both `GAS_CONVERT_URL` and `CLOUD_RUN_URL` are configured, Office→PDF uses
+GAS so Drive conversion runs under the dedicated conversion account; other heavy
+operations still use Cloud Run.
 
 Optional (CLI deploy of the script): use [`clasp`](https://github.com/google/clasp)
 — `clasp create --type webapp`, `clasp push`, `clasp deploy`.
@@ -58,9 +67,9 @@ Optional (CLI deploy of the script): use [`clasp`](https://github.com/google/cla
   a `token` field in the JSON POST body, checked against `SHARED_SECRET`) gates it.
   The browser never sees the token — the Worker injects it.
 - **Privacy:** Office conversion is inherently non-local. With GAS, the file
-  briefly becomes a temp file in the **deploying user's Google Drive**, deleted
-  immediately after export. Surface this to users; PDFs/images still stay 100%
-  in-browser. This is the documented trade-off for Office support.
+  briefly becomes a temp file in the **dedicated conversion account's Google
+  Drive**, deleted immediately after export. Surface this to users; PDFs/images
+  still stay 100% in-browser. This is the documented trade-off for Office support.
 
 ## Limits (Drive/GAS quotas)
 

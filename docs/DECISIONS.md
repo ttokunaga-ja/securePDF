@@ -20,7 +20,7 @@ separate heavy-processing repo.
 | D2 | PDF engine = **`@cantoo/pdf-lib`** | Accepted |
 | D3 | Monorepo via **pnpm workspaces** | Accepted |
 | D4 | Build with **Vite 8**, **TypeScript 5.9 strict** | Accepted |
-| D5 | GUI = **React 19 + MUI 6 + Emotion**, local-first | Accepted |
+| D5 | GUI = **React 19 + MUI 6 + Emotion**, client-first | Accepted |
 | D6 | Rendering = **`pdfjs-dist`** (PDF.js), GUI-only | Accepted |
 | D7 | Image decoders = **`@jsquash/*` + pure-JS**, lazy per-format | Accepted |
 | D8 | Tests = **Vitest** (+ Workers pool) and **Playwright** | Accepted |
@@ -58,7 +58,7 @@ Workspace protocol wires `core`/`schema`/`codecs` into `web`/`cli`/`worker`.
 Matches sibling repos: `target: ES2022`, `module: ESNext`,
 `moduleResolution: "Bundler"`, `strict: true`, `"type": "module"`.
 
-### D5 — React 19 + MUI 6 + Emotion, local-first
+### D5 — React 19 + MUI 6 + Emotion, client-first
 
 The user's GUIs are consistently React 19 + MUI 6 + Emotion. The GUI processes
 files **in-browser by default** (no upload), which is the privacy story and the
