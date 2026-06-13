@@ -45,6 +45,10 @@ export const ja = {
     'PDF・画像ファイルをここにドロップ、またはクリックして開きます。すべてブラウザ内で処理され、アップロードされません。',
   'empty.open': 'ファイルを開く',
 
+  'ad.regionLabel': '広告',
+  'ad.label': '広告',
+  'ad.placeholder': 'AdSense 広告枠',
+
   'status.pagesAdded': '{count}ページを追加しました。合計{total}ページ。',
   'status.pagesRemoved': '{count}ページを削除しました。残り{total}ページ。',
   'status.reordered': 'ページを移動しました。',

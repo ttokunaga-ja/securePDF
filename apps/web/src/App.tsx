@@ -66,6 +66,7 @@ function EditorApp() {
   const [twoPageView, setTwoPageView] = useState(false)
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false)
   const [pendingAuthImport, setPendingAuthImport] = useState<PendingAuthImport | null>(null)
+  const [preInputAdsDismissed, setPreInputAdsDismissed] = useState(false)
 
   const { files, pages } = useDocState()
   const actions = useDocActions()
@@ -78,6 +79,7 @@ function EditorApp() {
     (list, insertAt) => {
       const items = list ? Array.from(list) : []
       if (items.length === 0) return
+      setPreInputAdsDismissed(true)
 
       if (shouldRequestOfficeAuth(items)) {
         setPendingAuthImport({ files: items, insertAt })
@@ -92,6 +94,14 @@ function EditorApp() {
   )
   const { inputRef, openPickerAt, onInputChange } = useFilePicker(importFilesWithAuthGate)
   const { exportPdf } = usePdfExport(task, outputFilename, setOutputFilename)
+
+  const handlePickAt = useCallback(
+    (insertAt?: number) => {
+      setPreInputAdsDismissed(true)
+      openPickerAt(insertAt)
+    },
+    [openPickerAt],
+  )
 
   const handleOpenApiKey = useCallback(() => {
     setPendingAuthImport(null)
@@ -131,6 +141,7 @@ function EditorApp() {
   }, [])
 
   const initialDropEnabled = files.length === 0 && pages.length === 0
+  const showPreInputAds = initialDropEnabled && !preInputAdsDismissed && !task.busy
 
   return (
     <InitialDropZone
@@ -216,7 +227,7 @@ function EditorApp() {
           error={task.error}
           onDismissError={() => task.setError(null)}
           onImportFiles={importFilesWithAuthGate}
-          onPickAt={openPickerAt}
+          onPickAt={handlePickAt}
         />
         <ResizableDivider
           variant="light"
@@ -230,7 +241,8 @@ function EditorApp() {
           twoPageView={twoPageView}
           zoom={zoom.zoom}
           busy={task.busy}
-          onOpenFiles={(insertAt) => openPickerAt(insertAt)}
+          showPreInputAds={showPreInputAds}
+          onOpenFiles={handlePickAt}
         />
       </Box>
     </InitialDropZone>

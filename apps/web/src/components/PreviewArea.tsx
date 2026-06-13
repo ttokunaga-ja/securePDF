@@ -8,12 +8,15 @@ import { useDocActions, useDocState } from '../features/document/DocumentContext
 import { selectFilesById } from '../features/document/selectors'
 import type { PageItem } from '../features/document/types'
 import { nearestPreviewPageKey } from '../lib/previewScroll'
+import { PreInputAdSlot } from './PreInputAdSlot'
 import { PreviewPage } from './PreviewPage'
 
 interface PreviewAreaProps {
   twoPageView: boolean
   zoom: number
   busy: boolean
+  /** Show the pre-input ad placements around the empty-state CTA. */
+  showPreInputAds?: boolean
   /** Open the file picker from the empty-state call to action. */
   onOpenFiles: (insertAt?: number) => void
 }
@@ -21,7 +24,13 @@ interface PreviewAreaProps {
 type PreviewItem = { kind: 'slot'; index: number } | { kind: 'page'; page: PageItem; index: number }
 
 /** The main preview canvas: a Chrome-PDF-viewer-style continuous scroll area. */
-export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAreaProps) {
+export function PreviewArea({
+  twoPageView,
+  zoom,
+  busy,
+  showPreInputAds = false,
+  onOpenFiles,
+}: PreviewAreaProps) {
   const state = useDocState()
   const { setActive } = useDocActions()
   const filesById = useMemo(() => selectFilesById(state.files), [state.files])
@@ -276,23 +285,43 @@ export function PreviewArea({ twoPageView, zoom, busy, onOpenFiles }: PreviewAre
           <Stack
             alignItems="center"
             justifyContent="center"
-            spacing={2}
-            sx={{ minHeight: '100%', p: 4, textAlign: 'center' }}
+            spacing={showPreInputAds ? { xs: 5, md: 7 } : 0}
+            sx={{
+              minHeight: '100%',
+              px: { xs: 2, sm: 4 },
+              py: { xs: 5, md: 7 },
+              textAlign: 'center',
+            }}
           >
-            <UploadFileIcon sx={{ fontSize: 64, color: 'rgba(255,255,255,0.65)' }} />
-            <Typography component="h2" variant="h6" sx={{ color: '#ffffff', fontWeight: 600 }}>
-              {t('empty.title')}
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.85)', maxWidth: 440 }}>
-              {t('empty.body')}
-            </Typography>
-            <Button
-              variant="contained"
-              startIcon={<UploadFileIcon />}
-              onClick={() => onOpenFiles()}
+            {showPreInputAds && <PreInputAdSlot placement="top" />}
+
+            <Stack
+              alignItems="center"
+              spacing={2}
+              sx={{
+                width: '100%',
+                maxWidth: 560,
+                mx: 'auto',
+                py: showPreInputAds ? { xs: 1.5, md: 2 } : 0,
+              }}
             >
-              {t('empty.open')}
-            </Button>
+              <UploadFileIcon sx={{ fontSize: 64, color: 'rgba(255,255,255,0.65)' }} />
+              <Typography component="h2" variant="h6" sx={{ color: '#ffffff', fontWeight: 600 }}>
+                {t('empty.title')}
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.85)', maxWidth: 440 }}>
+                {t('empty.body')}
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<UploadFileIcon />}
+                onClick={() => onOpenFiles()}
+              >
+                {t('empty.open')}
+              </Button>
+            </Stack>
+
+            {showPreInputAds && <PreInputAdSlot placement="bottom" />}
           </Stack>
         )}
       </Box>
